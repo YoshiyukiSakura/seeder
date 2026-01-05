@@ -24,13 +24,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { planId } = await params
 
   try {
-    const plan = await prisma.plan.findFirst({
-      where: {
-        id: planId,
-        project: {
-          userId: user.id,
-        },
-      },
+    // 全员共享：移除用户限制
+    const plan = await prisma.plan.findUnique({
+      where: { id: planId },
       include: {
         project: {
           select: {
@@ -71,12 +67,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { planId } = await params
 
   try {
-    // 验证计划属于当前用户
-    const existing = await prisma.plan.findFirst({
-      where: {
-        id: planId,
-        project: { userId: user.id },
-      },
+    // 全员共享：仅验证计划存在
+    const existing = await prisma.plan.findUnique({
+      where: { id: planId },
     })
 
     if (!existing) {
@@ -113,12 +106,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const { planId } = await params
 
   try {
-    // 验证计划属于当前用户
-    const existing = await prisma.plan.findFirst({
-      where: {
-        id: planId,
-        project: { userId: user.id },
-      },
+    // 全员共享：仅验证计划存在
+    const existing = await prisma.plan.findUnique({
+      where: { id: planId },
     })
 
     if (!existing) {

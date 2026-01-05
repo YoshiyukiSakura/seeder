@@ -12,6 +12,7 @@ export interface AuthUser {
   id: string
   slackUserId: string
   slackUsername: string
+  slackTeamId: string | null
   email: string | null
   avatarUrl: string | null
 }
@@ -20,6 +21,7 @@ interface TokenPayload extends JWTPayload {
   userId: string
   slackUserId: string
   slackUsername: string
+  slackTeamId: string | null
 }
 
 /**
@@ -44,6 +46,7 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
         id: true,
         slackUserId: true,
         slackUsername: true,
+        slackTeamId: true,
         email: true,
         avatarUrl: true,
       },

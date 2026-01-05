@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
       userId: user.id,
       slackUserId: user.slackUserId,
       slackUsername: user.slackUsername,
+      slackTeamId: user.slackTeamId,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()

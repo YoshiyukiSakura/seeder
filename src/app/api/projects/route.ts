@@ -17,9 +17,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // 全员共享：所有用户可以看到所有项目
     const projects = await prisma.project.findMany({
-      where: { userId: user.id },
       include: {
+        user: {
+          select: {
+            id: true,
+            slackUsername: true,
+            avatarUrl: true,
+          },
+        },
         plans: {
           select: {
             id: true,

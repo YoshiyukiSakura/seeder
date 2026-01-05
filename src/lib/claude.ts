@@ -1,4 +1,8 @@
 import { spawn } from 'child_process'
+import {
+  type AnySSEEvent,
+  createSSEError,
+} from './sse-types'
 
 export interface ClaudeMessage {
   type: 'system' | 'assistant' | 'user' | 'result'
@@ -21,19 +25,21 @@ export interface ClaudeMessage {
     }>
   }
   result?: string
+  session_id?: string  // Claude CLI 返回的会话 ID
   tools?: string[]
 }
 
-export interface SSEEvent {
-  type: 'init' | 'text' | 'question' | 'tool' | 'result' | 'error' | 'done'
-  data: unknown
+export interface RunClaudeOptions {
+  prompt: string
+  cwd: string
+  sessionId?: string  // 用于 --resume 恢复特定会话
 }
 
 export function runClaude(
-  prompt: string,
-  cwd: string,
-  useContinue: boolean = false
-): AsyncIterable<SSEEvent> {
+  options: RunClaudeOptions
+): AsyncIterable<AnySSEEvent> {
+  const { prompt, cwd, sessionId } = options
+
   const args = [
     '--permission-mode', 'plan',
     '--output-format', 'stream-json',
@@ -41,8 +47,9 @@ export function runClaude(
     '--print',
   ]
 
-  if (useContinue) {
-    args.push('--continue')
+  // 使用 --resume <sessionId> 恢复特定会话，比 --continue 更精确安全
+  if (sessionId) {
+    args.push('--resume', sessionId)
   }
 
   args.push(prompt)
@@ -54,20 +61,27 @@ export function runClaude(
 
   claude.stdin.end()
 
+  // 收集 stderr 错误信息
+  let stderrBuffer = ''
+  claude.stderr.on('data', (data) => {
+    stderrBuffer += data.toString()
+  })
+
   return {
     async *[Symbol.asyncIterator]() {
       let buffer = ''
+      let hasError = false
 
-      yield { type: 'init', data: { cwd, useContinue } }
+      yield { type: 'init', data: { cwd, resuming: !!sessionId } }
 
-      const processLine = (line: string): SSEEvent | null => {
+      const processLine = (line: string): AnySSEEvent | null => {
         if (!line.trim()) return null
 
         try {
           const msg: ClaudeMessage = JSON.parse(line)
 
           if (msg.type === 'system' && msg.subtype === 'init') {
-            return { type: 'init', data: { tools: msg.tools?.length || 0 } }
+            return { type: 'init', data: { cwd, tools: msg.tools?.length || 0 } }
           }
 
           if (msg.type === 'assistant' && msg.message?.content) {
@@ -77,7 +91,7 @@ export function runClaude(
                 return {
                   type: 'question',
                   data: {
-                    toolUseId: content.id,
+                    toolUseId: content.id || '',
                     questions: questions.map(q => ({
                       question: q.question,
                       header: q.header,
@@ -89,7 +103,7 @@ export function runClaude(
               }
 
               if (content.type === 'tool_use') {
-                return { type: 'tool', data: { name: content.name } }
+                return { type: 'tool', data: { name: content.name || 'unknown' } }
               }
 
               if (content.type === 'text' && content.text) {
@@ -99,7 +113,23 @@ export function runClaude(
           }
 
           if (msg.type === 'result' && msg.subtype === 'success') {
-            return { type: 'result', data: { content: msg.result } }
+            return {
+              type: 'result',
+              data: {
+                content: msg.result || '',
+                sessionId: msg.session_id  // 提取并返回 session_id
+              }
+            }
+          }
+
+          // 处理 result 错误
+          if (msg.type === 'result' && msg.subtype === 'error') {
+            hasError = true
+            return createSSEError(
+              msg.result || 'Unknown error occurred',
+              'claude_error',
+              { recoverable: false }
+            )
           }
 
           return null
@@ -123,6 +153,22 @@ export function runClaude(
       if (buffer.trim()) {
         const event = processLine(buffer)
         if (event) yield event
+      }
+
+      // 检查是否有 session 相关错误
+      if (stderrBuffer && !hasError) {
+        const stderrTrimmed = stderrBuffer.trim()
+        if (stderrTrimmed) {
+          const isSessionError = stderrTrimmed.includes('session') ||
+                                 stderrTrimmed.includes('not found') ||
+                                 stderrTrimmed.includes('expired')
+
+          yield createSSEError(
+            stderrTrimmed,
+            isSessionError ? 'session_error' : 'process_error',
+            { recoverable: isSessionError }
+          )
+        }
       }
 
       yield { type: 'done', data: {} }

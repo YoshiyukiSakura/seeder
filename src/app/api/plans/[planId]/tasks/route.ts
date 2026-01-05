@@ -34,12 +34,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { planId } = await params
 
   try {
-    // 验证计划属于当前用户
-    const plan = await prisma.plan.findFirst({
-      where: {
-        id: planId,
-        project: { userId: user.id },
-      },
+    // 全员共享：仅验证计划存在
+    const plan = await prisma.plan.findUnique({
+      where: { id: planId },
     })
 
     if (!plan) {
@@ -69,12 +66,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { planId } = await params
 
   try {
-    // 验证计划属于当前用户
-    const plan = await prisma.plan.findFirst({
-      where: {
-        id: planId,
-        project: { userId: user.id },
-      },
+    // 全员共享：仅验证计划存在
+    const plan = await prisma.plan.findUnique({
+      where: { id: planId },
     })
 
     if (!plan) {

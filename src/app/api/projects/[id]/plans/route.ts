@@ -23,9 +23,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id: projectId } = await params
 
   try {
-    // 验证项目属于当前用户
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, userId: user.id },
+    // 全员共享：仅验证项目存在
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
     })
 
     if (!project) {
@@ -60,9 +60,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { id: projectId } = await params
 
   try {
-    // 验证项目属于当前用户
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, userId: user.id },
+    // 全员共享：仅验证项目存在
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
     })
 
     if (!project) {

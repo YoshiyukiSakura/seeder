@@ -737,24 +737,84 @@ ${task.relatedFiles.map(f => `- \`${f}\``).join('\n')}
 - [x] 导出 JSON / Markdown
   - 前端下载按钮
 
-### Phase 2: 编辑能力 (1-2 周)
+### Phase 2: 编辑能力 ✅ (2026-01-05 完成)
 
-- [ ] 任务卡片编辑
-- [ ] 拖拽排序
-- [ ] 验收标准编辑
-- [ ] 依赖关系设置
+- [x] 任务卡片编辑
+  - TaskCard 组件支持点击选中
+  - TaskEditPanel 右侧滑入编辑面板
+  - 支持编辑标题、描述、优先级、标签、预估时间
+- [x] 拖拽排序
+  - 使用 @dnd-kit/core 和 @dnd-kit/sortable
+  - 支持拖拽调整任务顺序
+- [x] 验收标准编辑
+  - 支持添加新验收标准
+  - 支持删除现有验收标准
+  - 支持修改验收标准内容
+- [x] 依赖关系设置
+  - 下拉选择依赖的任务
+  - 防止循环依赖
 
-### Phase 3: Linear 集成 (1-2 周)
+### Phase 3: Linear 集成 ✅ (2026-01-05 完成)
 
-- [ ] Linear OAuth
-- [ ] 发布到 Linear
-- [ ] Issue 状态同步（可选）
+**技术方案** (参考 taskPilotSlackBot 实现):
+- 使用 `@linear/sdk` 官方 SDK
+- API Key 认证方式 (简单直接，适合团队内部使用)
+- 用户在设置页面配置个人 Linear API Key
 
-### Phase 4: 增强功能 (持续)
+**核心任务**:
+- [x] Linear API Key 配置
+  - 用户设置页面添加 Linear API Key 输入框
+  - 加密存储到 User.linearToken 字段
+  - 验证 API Key 有效性
+- [x] 获取 Linear 工作区信息
+  - 获取用户所属 Teams 列表
+  - 获取 Team 下的 Projects
+  - 获取工作流状态 (WorkflowStates)
+- [x] 发布任务到 Linear
+  - 选择目标 Team/Project
+  - 批量创建 Issues
+  - 保存 linearIssueId 关联
+- [x] 创建 META Issue (可选)
+  - 包含计划摘要
+  - 链接所有子任务
+- [ ] Issue 状态同步 (可选，后续实现)
+  - 定时同步 Linear Issue 状态
+  - 更新本地任务状态
 
-- [ ] Git 仓库连接
-- [ ] 项目上下文提取
-- [ ] 多人协作
+**详细实现方案见附录 B**
+
+### Phase 4: 多人协作 ✅ (2026-01-05 完成)
+
+**需求**:
+- 显示登录用户的用户名和头像
+- 全员共享所有项目（公司内部使用，无需权限隔离）
+- 无权限区分，所有登录用户可做任何操作
+
+**Step 1: Auth 层添加 slackTeamId 支持**
+- [x] `src/lib/auth.ts` - AuthUser 接口添加 `slackTeamId`，getCurrentUser SELECT 添加该字段
+- [x] `src/app/api/auth/slack/route.ts` - JWT payload 添加 `slackTeamId`
+- [x] `src/app/api/auth/me/route.ts` - 返回数据添加 `slackTeamId`
+
+**Step 2: 移除 API 用户隔离 (全员共享)**
+
+核心改动: 移除 `where: { userId: user.id }` 限制，所有登录用户共享所有资源
+
+- [x] `src/app/api/projects/route.ts` - 移除用户过滤，include user 信息显示创建者
+- [x] `src/app/api/projects/[id]/route.ts` - 移除用户权限检查
+- [x] `src/app/api/projects/[id]/plans/route.ts` - 同上
+- [x] `src/app/api/plans/[planId]/route.ts` - 同上
+- [x] `src/app/api/plans/[planId]/tasks/route.ts` - 同上
+- [x] `src/app/api/plans/[planId]/publish/route.ts` - 同上
+
+**Step 3: UserHeader 组件**
+- [x] 新建 `src/components/UserHeader.tsx` - 显示用户名 + 头像（或字母头像）+ 下拉菜单
+- [x] 修改 `src/app/page.tsx` - Header 集成 UserHeader
+
+**Step 4: (跳过) Slack 头像获取**
+- 用户暂无需求，字母头像已足够
+
+### Phase 5: 增强功能 (后续)
+
 - [ ] 历史版本对比
 - [ ] 模板库
 
@@ -903,44 +963,65 @@ Seeder 发布到 Linear 后，下游系统（如 Ralph Wiggum / Linear Harness�
 
 基于验证通过的技术方案，以下是需要实施的具体任务：
 
-### 12.1 Session 管理优化 (高优先级)
+### 12.1 Session 管理优化 ✅ (2026-01-05 完成)
 
-- [ ] 修改 `/api/claude/start` - 从 result 消息中提取 `session_id` 并返回给前端
-- [ ] 修改 `/api/claude/continue` - 接收 `sessionId` 参数，使用 `--resume <session_id>` 替代 `--continue`
-- [ ] 前端状态管理 - 保存当前会话的 `sessionId`，每次继续对话时传递
-- [ ] 错误处理 - 处理 session 过期或不存在的情况
+- [x] 修改 `/api/claude/start` - 从 result 消息中提取 `session_id` 并返回给前端
+- [x] 修改 `/api/claude/continue` - 接收 `sessionId` 参数，使用 `--resume <session_id>` 替代 `--continue`
+- [x] 前端状态管理 - 保存当前会话的 `sessionId`，每次继续对话时传递
+- [x] 错误处理 - 处理 session 过期或不存在的情况
 
-### 12.2 API 完善
+### 12.2 API 完善 ✅ (2026-01-05 完成)
 
-- [ ] 实现 `/api/projects` - 读取 `PROJECTS_ROOT` 目录下的项目列表
-- [ ] 添加项目详情接口 - 返回项目技术栈、描述等信息
-- [ ] SSE 错误事件 - 统一错误格式，便于前端处理
+- [x] 实现 `/api/projects/local` - 读取 `PROJECTS_ROOT` 目录下的项目列表
+- [x] 添加项目详情接口 `/api/projects/local/details` - 返回项目技术栈、描述等信息
+- [x] SSE 错误事件 - 统一错误格式 (`src/lib/sse-types.ts`)，便于前端处理
 
 ### 12.3 前端功能
 
-- [ ] 项目下拉选择器 - 调用 `/api/projects` 获取列表
-- [ ] 加载状态优化 - 添加 skeleton loading
-- [ ] 历史对话展示 - 保存并展示完整对话历史
-- [ ] 问题回答 UI - 支持多选 (multiSelect) 问题类型
+- [x] 项目下拉选择器 - 调用 `/api/projects` 获取列表
+  - 新建 `src/components/ProjectSelector.tsx` 组件
+  - 支持数据库项目和本地项目两种来源
+  - 支持搜索过滤、技术栈展示、Git 状态标识
+  - 已集成到主页面 Header 区域
+  - 选中项目的 path 会传递给 Claude API
+- [x] 加载状态优化 - 添加 skeleton loading
+  - 新建 `src/components/ui/Skeleton.tsx` - 骨架屏组件 (Skeleton, TaskCardSkeleton, TaskListSkeleton 等)
+  - 新建 `src/components/ui/LoadingSpinner.tsx` - 加载动画组件 (LoadingSpinner, LoadingOverlay, LoadingState 等)
+  - TaskList 组件添加 `loading` prop，处理加载时显示骨架屏
+  - 主页面 processing 状态使用统一的 LoadingSpinner 组件
+- [x] 历史对话展示 - 保存并展示完整对话历史
+  - 新建 `/api/plans/[planId]/conversations` API (GET/POST/DELETE)
+  - 修改 `/api/claude/start` - 创建 Plan 并保存用户/助手消息到数据库
+  - 修改 `/api/claude/continue` - 保存后续对话消息
+  - 前端传递 projectId 和 planId，在 result 事件中接收 planId
+  - 状态栏显示对话保存状态（数据库项目显示"Conversation will be saved"）
+  - 注：仅数据库项目支持对话持久化，本地项目对话不保存
+- [x] 问题回答 UI - 支持多选 (multiSelect) 问题类型
+  - SelectedAnswers 类型支持 `string | string[]`
+  - handleSelectAnswer 区分单选/多选逻辑（toggle 行为）
+  - 多选问题显示 "(Multiple selections allowed)" 提示
+  - 选项按钮使用复选框样式 (☑/☐)
+  - 答案格式化为逗号分隔列表
+  - 添加单元测试验证格式化逻辑
 
-### 12.4 计划结果处理
+### 12.4 计划结果处理 ✅ (2026-01-05 完成)
 
-- [ ] 解析 result 内容 - 从 Markdown 提取结构化任务
-- [ ] 任务卡片展示 - 右侧面板显示任务列表
-- [ ] 任务编辑功能 - 支持修改任务标题、描述、优先级
+- [x] 解析 result 内容 - 从 Markdown 提取结构化任务
+  - `parseTasksFromResult()` 函数 (src/app/page.tsx:35-93)
+  - 正则解析 Markdown 格式，提取优先级、验收标准、标签、预估时间、相关文件
+- [x] 任务卡片展示 - 右侧面板显示任务列表
+  - TaskCard 组件：优先级颜色编码、拖拽排序、验收标准预览
+  - TaskList 组件：筛选、统计、导出/发布按钮
+- [x] 任务编辑功能 - 支持修改任务标题、描述、优先级
+  - TaskEditPanel 组件：完整编辑面板，支持所有字段编辑
+  - 支持验收标准增删改、依赖关系设置、标签管理
 
 ### 12.5 数据持久化
 
-- [ ] 配置 Prisma + PostgreSQL
-- [ ] 实现用户认证 (Slack Bot，见附录 A)
-- [ ] 保存对话历史和计划结果
+- [x] 配置 Prisma + PostgreSQL (已在 Phase 1 完成)
+- [x] 实现用户认证 (Slack Bot，见附录 A) (已在 Phase 1 完成)
+- [x] 保存对话历史和计划结果 (已在 12.3 完成)
 - [ ] 会话管理 - 支持查看历史计划
-
-### 12.6 Linear 集成 (后期)
-
-- [ ] Linear OAuth 授权流程
-- [ ] 任务发布到 Linear
-- [ ] Issue 状态同步
 
 ---
 
@@ -1181,6 +1262,369 @@ export async function GET(request: NextRequest) {
 
 ---
 
-*文档版本: v1.3*
+## 附录 B：Linear 集成详细方案
+
+### B.1 技术选型
+
+**SDK**: `@linear/sdk` (官方 TypeScript SDK)
+```bash
+npm install @linear/sdk
+```
+
+**认证方式**: Personal API Key (非 OAuth)
+- 优点：实现简单，无需回调 URL 配置
+- 缺点：每个用户需要手动获取 API Key
+- 适用场景：团队内部工具，信任用户
+
+**获取 API Key**: Linear Settings → API → Personal API Keys → Create key
+
+### B.2 Linear SDK 核心 API
+
+```typescript
+// lib/linear/client.ts
+import { LinearClient } from '@linear/sdk'
+
+// 初始化客户端
+export function createLinearClient(apiKey: string) {
+  return new LinearClient({ apiKey })
+}
+
+// 验证 API Key 是否有效
+export async function validateApiKey(apiKey: string): Promise<boolean> {
+  try {
+    const client = new LinearClient({ apiKey })
+    await client.viewer  // 获取当前用户信息
+    return true
+  } catch {
+    return false
+  }
+}
+
+// 获取用户所属团队列表
+export async function getTeams(client: LinearClient) {
+  const teams = await client.teams()
+  return teams.nodes.map(team => ({
+    id: team.id,
+    name: team.name,
+    key: team.key,  // 团队标识，如 "ENG"
+  }))
+}
+
+// 获取团队下的项目列表
+export async function getProjects(client: LinearClient, teamId: string) {
+  const team = await client.team(teamId)
+  const projects = await team.projects()
+  return projects.nodes.map(project => ({
+    id: project.id,
+    name: project.name,
+    state: project.state,  // "planned" | "started" | "completed" | etc.
+  }))
+}
+
+// 获取工作流状态
+export async function getWorkflowStates(client: LinearClient, teamId: string) {
+  const states = await client.workflowStates({
+    filter: { team: { id: { eq: teamId } } }
+  })
+  return states.nodes.map(state => ({
+    id: state.id,
+    name: state.name,
+    type: state.type,  // "backlog" | "unstarted" | "started" | "completed" | "canceled"
+    color: state.color,
+  }))
+}
+```
+
+### B.3 发布任务到 Linear
+
+```typescript
+// lib/linear/publish.ts
+import { LinearClient } from '@linear/sdk'
+import { Task } from '@prisma/client'
+
+interface PublishOptions {
+  teamId: string
+  projectId?: string      // 可选，不指定则不关联项目
+  createMetaIssue: boolean
+  planName: string
+}
+
+interface PublishResult {
+  success: boolean
+  issues: Array<{
+    taskId: string
+    linearIssueId: string
+    linearIssueUrl: string
+    identifier: string    // 如 "ENG-123"
+  }>
+  metaIssue?: {
+    id: string
+    url: string
+    identifier: string
+  }
+}
+
+// 优先级映射: Seedbed -> Linear
+const PRIORITY_MAP: Record<number, number> = {
+  0: 1,  // P0 (紧急) -> Urgent
+  1: 2,  // P1 (高)   -> High
+  2: 3,  // P2 (中)   -> Medium
+  3: 4,  // P3 (低)   -> Low
+}
+
+export async function publishToLinear(
+  client: LinearClient,
+  tasks: Task[],
+  options: PublishOptions
+): Promise<PublishResult> {
+  const results: PublishResult['issues'] = []
+
+  // 1. 批量创建 Issues
+  for (const task of tasks) {
+    const description = formatIssueDescription(task)
+
+    const issuePayload = await client.createIssue({
+      teamId: options.teamId,
+      projectId: options.projectId,
+      title: task.title,
+      description,
+      priority: PRIORITY_MAP[task.priority] || 3,
+      estimate: task.estimateHours,
+    })
+
+    if (issuePayload.success) {
+      const issue = await issuePayload.issue
+      results.push({
+        taskId: task.id,
+        linearIssueId: issue.id,
+        linearIssueUrl: issue.url,
+        identifier: issue.identifier,
+      })
+    }
+  }
+
+  // 2. 创建 META Issue (可选)
+  let metaIssue: PublishResult['metaIssue']
+  if (options.createMetaIssue && results.length > 0) {
+    const metaDescription = formatMetaIssueDescription(options.planName, tasks, results)
+
+    const metaPayload = await client.createIssue({
+      teamId: options.teamId,
+      projectId: options.projectId,
+      title: `📋 计划: ${options.planName}`,
+      description: metaDescription,
+      priority: 2,  // High priority for tracking
+    })
+
+    if (metaPayload.success) {
+      const issue = await metaPayload.issue
+      metaIssue = {
+        id: issue.id,
+        url: issue.url,
+        identifier: issue.identifier,
+      }
+    }
+  }
+
+  return {
+    success: results.length === tasks.length,
+    issues: results,
+    metaIssue,
+  }
+}
+
+// 格式化 Issue 描述
+function formatIssueDescription(task: Task): string {
+  let description = task.description || ''
+
+  if (task.acceptanceCriteria?.length > 0) {
+    description += '\n\n## 验收标准\n'
+    description += task.acceptanceCriteria.map(c => `- [ ] ${c}`).join('\n')
+  }
+
+  if (task.relatedFiles?.length > 0) {
+    description += '\n\n## 相关文件\n'
+    description += task.relatedFiles.map(f => `- \`${f}\``).join('\n')
+  }
+
+  description += '\n\n---\n*由 Seedbed 自动创建*'
+
+  return description
+}
+
+// 格式化 META Issue 描述
+function formatMetaIssueDescription(
+  planName: string,
+  tasks: Task[],
+  publishedIssues: PublishResult['issues']
+): string {
+  const p0Count = tasks.filter(t => t.priority === 0).length
+  const p1Count = tasks.filter(t => t.priority === 1).length
+  const p2Count = tasks.filter(t => t.priority === 2).length
+  const p3Count = tasks.filter(t => t.priority === 3).length
+  const totalHours = tasks.reduce((sum, t) => sum + (t.estimateHours || 0), 0)
+
+  let description = `# 📋 计划摘要: ${planName}\n\n`
+
+  description += `## 任务统计\n`
+  description += `- 总任务数: ${tasks.length}\n`
+  description += `- P0 (紧急): ${p0Count}\n`
+  description += `- P1 (高): ${p1Count}\n`
+  description += `- P2 (中): ${p2Count}\n`
+  description += `- P3 (低): ${p3Count}\n`
+  description += `- 总预估工时: ${totalHours}h\n\n`
+
+  description += `## 任务列表\n`
+  publishedIssues.forEach((issue, index) => {
+    const task = tasks.find(t => t.id === issue.taskId)
+    description += `- [ ] ${issue.identifier} ${task?.title || ''}\n`
+  })
+
+  description += '\n---\n*由 Seedbed 生成*'
+
+  return description
+}
+```
+
+### B.4 API 路由设计
+
+```typescript
+// POST /api/linear/validate
+// 验证 Linear API Key
+interface ValidateRequest {
+  apiKey: string
+}
+interface ValidateResponse {
+  valid: boolean
+  user?: { id: string; name: string; email: string }
+}
+
+// GET /api/linear/teams
+// 获取用户所属团队列表
+interface TeamsResponse {
+  teams: Array<{ id: string; name: string; key: string }>
+}
+
+// GET /api/linear/teams/[teamId]/projects
+// 获取团队下的项目列表
+interface ProjectsResponse {
+  projects: Array<{ id: string; name: string; state: string }>
+}
+
+// POST /api/plans/[planId]/publish
+// 发布计划到 Linear
+interface PublishRequest {
+  teamId: string
+  projectId?: string
+  createMetaIssue?: boolean
+}
+interface PublishResponse {
+  success: boolean
+  issues: Array<{
+    taskId: string
+    linearIssueId: string
+    linearIssueUrl: string
+    identifier: string
+  }>
+  metaIssue?: {
+    id: string
+    url: string
+    identifier: string
+  }
+}
+```
+
+### B.5 发布 UI 流程
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  发布到 Linear                                               │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  选择团队                                                    │
+│  ┌───────────────────────────────────────────┐              │
+│  │ ▾ Engineering (ENG)                       │              │
+│  └───────────────────────────────────────────┘              │
+│                                                              │
+│  选择项目 (可选)                                             │
+│  ┌───────────────────────────────────────────┐              │
+│  │ ▾ 不关联项目                              │              │
+│  │   Blog - 评论功能                          │              │
+│  │   用户系统重构                             │              │
+│  └───────────────────────────────────────────┘              │
+│                                                              │
+│  ☑ 创建计划摘要 Issue (META Issue)                          │
+│                                                              │
+│  ─────────────────────────────────────────────────────────  │
+│                                                              │
+│  将创建 12 个 Issues:                                        │
+│  • P0: 2 个                                                  │
+│  • P1: 4 个                                                  │
+│  • P2: 5 个                                                  │
+│  • P3: 1 个                                                  │
+│                                                              │
+│  [取消]                                    [确认发布]        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### B.6 用户设置页面
+
+**设置路径**: `/settings`
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ⚙️ 设置                                                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Linear 集成                                                 │
+│  ─────────────────────────────────────────────────────────  │
+│                                                              │
+│  API Key                                                     │
+│  ┌───────────────────────────────────────────┐              │
+│  │ lin_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  │              │
+│  └───────────────────────────────────────────┘              │
+│  ✅ 已验证 - 关联账户: john@example.com                      │
+│                                                              │
+│  [获取 API Key →]  [验证] [保存]                             │
+│                                                              │
+│  ─────────────────────────────────────────────────────────  │
+│                                                              │
+│  如何获取 API Key:                                           │
+│  1. 打开 Linear Settings                                     │
+│  2. 点击 API → Personal API Keys                             │
+│  3. 点击 "Create key"，输入名称如 "Seedbed"                  │
+│  4. 复制生成的 Key 并粘贴到上方                               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### B.7 待办事项
+
+**Phase 3.1: Linear API Key 配置** ✅
+- [x] 创建 `/settings` 页面
+- [x] 添加 Linear API Key 输入组件
+- [x] 实现 `/api/linear/validate` 验证 API
+- [x] 实现 API Key 加密存储 (User.linearToken)
+- [x] 添加"获取 API Key"外链指引
+
+**Phase 3.2: 获取 Linear 工作区信息** ✅
+- [x] 实现 `/api/linear/teams` API
+- [x] 实现 `/api/linear/teams/[teamId]/projects` API
+- [x] 前端团队/项目选择下拉组件
+
+**Phase 3.3: 发布功能** ✅
+- [x] 实现 `lib/linear/publish.ts` 发布逻辑
+- [x] 实现 `/api/plans/[planId]/publish` API
+- [x] 创建 PublishDialog 发布弹窗组件
+- [x] 发布成功后显示 Linear 链接
+- [x] 保存 Task.linearIssueId 关联
+
+**Phase 3.4: 状态同步 (可选，后续实现)**
+- [ ] 定时任务或 Webhook 同步 Issue 状态
+- [ ] 更新本地 Task 状态显示
+
+---
+
+*文档版本: v1.8*
 *最后更新: 2026-01-05*
-*变更说明: 将 GitHub OAuth 替换为 Slack Bot 认证方案，添加附录 A 详细设计*
+*变更说明: 12.1 Session 管理优化完成 - 使用 --resume <sessionId> 替代 --continue，前端保存和传递 sessionId，增强错误处理*

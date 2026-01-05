@@ -1,40 +1,120 @@
 import { NextRequest } from 'next/server'
 import { runClaude } from '@/lib/claude'
+import { createSSEError, encodeSSEEvent } from '@/lib/sse-types'
+import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
-  const { answer, projectPath } = await request.json()
+  let body: { answer?: string; projectPath?: string; sessionId?: string; planId?: string }
+  try {
+    body = await request.json()
+  } catch {
+    const errorEvent = createSSEError(
+      'Invalid JSON in request body',
+      'validation_error'
+    )
+    return new Response(encodeSSEEvent(errorEvent), {
+      status: 400,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })
+  }
+
+  const { answer, projectPath, sessionId, planId } = body
 
   if (!answer) {
-    return new Response(JSON.stringify({ error: 'answer is required' }), {
+    const errorEvent = createSSEError(
+      'answer is required',
+      'validation_error',
+      { code: 'MISSING_ANSWER' }
+    )
+    return new Response(encodeSSEEvent(errorEvent), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'text/event-stream' },
+    })
+  }
+
+  if (!sessionId) {
+    const errorEvent = createSSEError(
+      'sessionId is required for continuing conversation',
+      'validation_error',
+      { code: 'MISSING_SESSION_ID' }
+    )
+    return new Response(encodeSSEEvent(errorEvent), {
+      status: 400,
+      headers: { 'Content-Type': 'text/event-stream' },
     })
   }
 
   const cwd = projectPath || process.cwd()
 
+  // 保存用户回答到数据库
+  if (planId) {
+    try {
+      await prisma.conversation.create({
+        data: {
+          planId,
+          role: 'user',
+          content: answer
+        }
+      })
+    } catch (dbError) {
+      console.error('Database error saving user answer:', dbError)
+    }
+  }
+
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
+      let assistantContent = ''
+
       try {
-        for await (const event of runClaude(answer, cwd, true)) {
+        // 使用 --resume <sessionId> 恢复特定会话
+        for await (const event of runClaude({ prompt: answer, cwd, sessionId })) {
+          // 收集助手消息内容
+          if (event.type === 'text' && event.data?.content) {
+            assistantContent += event.data.content
+          }
+
+          // 在 result 事件中添加 planId
+          if (event.type === 'result' && planId) {
+            event.data.planId = planId
+          }
+
           const data = `data: ${JSON.stringify(event)}\n\n`
           controller.enqueue(encoder.encode(data))
         }
+
+        // 保存助手消息到数据库
+        if (planId && assistantContent) {
+          try {
+            await prisma.conversation.create({
+              data: {
+                planId,
+                role: 'assistant',
+                content: assistantContent
+              }
+            })
+          } catch (dbError) {
+            console.error('Database error saving assistant response:', dbError)
+          }
+        }
       } catch (error) {
-        const errorEvent = { type: 'error', data: { message: String(error) } }
+        const errorEvent = createSSEError(
+          String(error),
+          'process_error',
+          { recoverable: true, details: 'Failed to continue Claude CLI session' }
+        )
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`))
       } finally {
         controller.close()
       }
-    }
+    },
   })
 
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
   })
 }

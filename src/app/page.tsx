@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { TaskList, Task } from '@/components/tasks'
+import { UserHeader } from '@/components/UserHeader'
+import { ProjectSelector, Project } from '@/components/ProjectSelector'
+import { LoadingSpinner } from '@/components/ui'
 
 interface Message {
   id: string
@@ -22,71 +26,10 @@ interface PendingQuestion {
 }
 
 interface SelectedAnswers {
-  [questionIndex: number]: string
-}
-
-interface Task {
-  id: string
-  title: string
-  description: string
-  priority: number
-  labels: string[]
-  acceptanceCriteria: string[]
-  relatedFiles: string[]
-  estimateHours?: number
+  [questionIndex: number]: string | string[]  // string for single select, string[] for multiSelect
 }
 
 type AppState = 'idle' | 'processing' | 'waiting_input' | 'completed'
-
-// 任务卡片组件
-function TaskCard({ task }: { task: Task }) {
-  const priorityColors: Record<number, string> = {
-    0: 'border-red-500 bg-red-900/20',
-    1: 'border-orange-500 bg-orange-900/20',
-    2: 'border-yellow-500 bg-yellow-900/20',
-    3: 'border-gray-500 bg-gray-900/20',
-  }
-
-  const priorityLabels = ['P0', 'P1', 'P2', 'P3']
-
-  return (
-    <div className={`border-l-4 ${priorityColors[task.priority] || priorityColors[2]} rounded-lg p-3 mb-3 bg-gray-800`}>
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-medium text-gray-400">{priorityLabels[task.priority]}</span>
-        {task.estimateHours && (
-          <span className="text-xs text-gray-500">{task.estimateHours}h</span>
-        )}
-      </div>
-      <h4 className="font-medium text-white mb-2">{task.title}</h4>
-      <p className="text-sm text-gray-400 mb-2 line-clamp-2">{task.description}</p>
-      {task.labels.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {task.labels.map((label, i) => (
-            <span key={i} className="px-2 py-0.5 text-xs bg-blue-900/50 text-blue-300 rounded">
-              {label}
-            </span>
-          ))}
-        </div>
-      )}
-      {task.acceptanceCriteria.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-gray-700">
-          <p className="text-xs text-gray-500 mb-1">Acceptance Criteria:</p>
-          <ul className="text-xs text-gray-400 space-y-0.5">
-            {task.acceptanceCriteria.slice(0, 3).map((ac, i) => (
-              <li key={i} className="flex items-start">
-                <span className="mr-1 text-gray-600">-</span>
-                <span className="line-clamp-1">{ac}</span>
-              </li>
-            ))}
-            {task.acceptanceCriteria.length > 3 && (
-              <li className="text-gray-500">+{task.acceptanceCriteria.length - 3} more...</li>
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // 解析 Claude 输出中的任务
 function parseTasksFromResult(content: string): Task[] {
@@ -158,7 +101,13 @@ export default function Home() {
   const [currentTools, setCurrentTools] = useState<string[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [resultContent, setResultContent] = useState('')
+  const [sessionId, setSessionId] = useState<string | null>(null)  // Claude 会话 ID
+  const [planId, setPlanId] = useState<string | null>(null)  // 当前对话关联的 Plan ID
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)  // 选中的项目
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // 判断是否是数据库项目（可以保存对话）
+  const isDatabaseProject = selectedProject && selectedProject.source === 'database'
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -252,10 +201,24 @@ export default function Home() {
                 setResultContent(event.data.content)
                 updateLastAssistantMessage('\n\n---\n**Plan Complete**\n' + event.data.content)
               }
+              // 保存 sessionId 用于后续继续对话
+              if (event.data.sessionId) {
+                setSessionId(event.data.sessionId)
+              }
+              // 保存 planId 用于后续继续对话
+              if (event.data.planId) {
+                setPlanId(event.data.planId)
+              }
               break
 
             case 'error':
-              addMessage('system', `Error: ${event.data.message}`)
+              // 根据错误类型提供不同的提示
+              if (event.data.errorType === 'session_error') {
+                addMessage('system', `Session error: ${event.data.message}. Please start a new conversation.`)
+                setSessionId(null)  // 清空无效的 sessionId
+              } else {
+                addMessage('system', `Error: ${event.data.message}`)
+              }
               break
           }
         } catch {
@@ -279,12 +242,19 @@ export default function Home() {
     addMessage('user', userMessage)
     setState('processing')
     setPendingQuestion(null)
+    setSessionId(null)  // 启动新会话时清空旧的 sessionId
+    setPlanId(null)     // 启动新会话时清空旧的 planId
 
     try {
       const response = await fetch('/api/claude/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userMessage })
+        body: JSON.stringify({
+          prompt: userMessage,
+          projectPath: selectedProject?.path,
+          // 只有数据库项目才传递 projectId，用于创建 Plan 和保存对话
+          projectId: isDatabaseProject ? selectedProject.id : undefined
+        })
       })
 
       await processSSE(response, true)
@@ -294,25 +264,57 @@ export default function Home() {
     }
   }
 
-  const handleSelectAnswer = (questionIndex: number, answer: string) => {
-    setSelectedAnswers(prev => ({
-      ...prev,
-      [questionIndex]: answer
-    }))
+  const handleSelectAnswer = (questionIndex: number, answer: string, isMultiSelect?: boolean) => {
+    setSelectedAnswers(prev => {
+      if (isMultiSelect) {
+        // For multiSelect questions, toggle the answer in an array
+        const currentAnswers = (prev[questionIndex] as string[]) || []
+        const isSelected = currentAnswers.includes(answer)
+        return {
+          ...prev,
+          [questionIndex]: isSelected
+            ? currentAnswers.filter(a => a !== answer)  // Remove if already selected
+            : [...currentAnswers, answer]               // Add if not selected
+        }
+      } else {
+        // For single select questions, replace the answer
+        return {
+          ...prev,
+          [questionIndex]: answer
+        }
+      }
+    })
   }
 
   const handleSubmitAllAnswers = async () => {
     if (state !== 'waiting_input' || !pendingQuestion) return
 
-    const allAnswered = pendingQuestion.questions.every((_, idx) => selectedAnswers[idx])
+    // Check all questions are answered (multiSelect: array length > 0, single: non-empty string)
+    const allAnswered = pendingQuestion.questions.every((q, idx) => {
+      const answer = selectedAnswers[idx]
+      if (q.multiSelect) {
+        return Array.isArray(answer) && answer.length > 0
+      }
+      return typeof answer === 'string' && answer.length > 0
+    })
     if (!allAnswered) {
       alert('Please answer all questions')
       return
     }
 
+    // 检查是否有有效的 sessionId
+    if (!sessionId) {
+      addMessage('system', 'Error: Session expired or not found. Please start a new conversation.')
+      setState('idle')
+      return
+    }
+
     const combinedAnswer = pendingQuestion.questions.map((q, idx) => {
       const header = q.header || `Question ${idx + 1}`
-      return `${header}: ${selectedAnswers[idx]}`
+      const answer = selectedAnswers[idx]
+      // Format multiSelect answers as comma-separated list
+      const formattedAnswer = Array.isArray(answer) ? answer.join(', ') : answer
+      return `${header}: ${formattedAnswer}`
     }).join('\n')
 
     addMessage('user', combinedAnswer)
@@ -324,7 +326,12 @@ export default function Home() {
       const response = await fetch('/api/claude/continue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answer: combinedAnswer })
+        body: JSON.stringify({
+          answer: combinedAnswer,
+          sessionId,
+          planId,  // 传递 planId 用于保存对话
+          projectPath: selectedProject?.path
+        })
       })
 
       await processSSE(response, true)
@@ -334,7 +341,16 @@ export default function Home() {
     }
   }
 
-  const totalEstimate = tasks.reduce((sum, t) => sum + (t.estimateHours || 0), 0)
+  // Task management handlers
+  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+    setTasks(prev => prev.map(task =>
+      task.id === taskId ? { ...task, ...updates } : task
+    ))
+  }
+
+  const handleTaskDelete = (taskId: string) => {
+    setTasks(prev => prev.filter(task => task.id !== taskId))
+  }
 
   return (
     <div className="flex h-screen">
@@ -342,8 +358,19 @@ export default function Home() {
       <div className="flex-1 flex flex-col border-r border-gray-700">
         {/* Header */}
         <header className="p-4 border-b border-gray-700">
-          <h1 className="text-2xl font-bold">Seedbed</h1>
-          <p className="text-gray-400 text-sm">AI Task Planning Assistant</p>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h1 className="text-2xl font-bold">Seedbed</h1>
+              <p className="text-gray-400 text-sm">AI Task Planning Assistant</p>
+            </div>
+            <UserHeader />
+          </div>
+          {/* Project Selector */}
+          <ProjectSelector
+            selectedProject={selectedProject}
+            onSelect={setSelectedProject}
+            className="max-w-md"
+          />
         </header>
 
         {/* Messages */}
@@ -378,7 +405,7 @@ export default function Home() {
           {state === 'processing' && (
             <div className="flex justify-start">
               <div className="bg-gray-700 rounded-lg p-3 flex items-center space-x-2">
-                <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <LoadingSpinner size="sm" />
                 <span className="text-gray-300 text-sm">
                   {currentTools.length > 0 ? `Using: ${currentTools[currentTools.length - 1]}` : 'Processing...'}
                 </span>
@@ -401,45 +428,80 @@ export default function Home() {
                   </p>
                   {q.options && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {q.options.map((opt, optIdx) => (
-                        <button
-                          key={optIdx}
-                          onClick={() => handleSelectAnswer(idx, opt.label)}
-                          className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                            selectedAnswers[idx] === opt.label
-                              ? 'bg-green-600 text-white ring-2 ring-green-400'
-                              : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
-                          }`}
-                          title={opt.description}
-                        >
-                          {opt.label}
-                          {selectedAnswers[idx] === opt.label && ' ✓'}
-                        </button>
-                      ))}
+                      {q.multiSelect && (
+                        <p className="w-full text-xs text-blue-300 mb-1">
+                          (Multiple selections allowed)
+                        </p>
+                      )}
+                      {q.options.map((opt, optIdx) => {
+                        // Check if this option is selected
+                        const isSelected = q.multiSelect
+                          ? ((selectedAnswers[idx] as string[]) || []).includes(opt.label)
+                          : selectedAnswers[idx] === opt.label
+
+                        return (
+                          <button
+                            key={optIdx}
+                            onClick={() => handleSelectAnswer(idx, opt.label, q.multiSelect)}
+                            className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                              isSelected
+                                ? 'bg-green-600 text-white ring-2 ring-green-400'
+                                : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
+                            }`}
+                            title={opt.description}
+                          >
+                            {q.multiSelect ? (isSelected ? '☑ ' : '☐ ') : ''}
+                            {opt.label}
+                            {!q.multiSelect && isSelected && ' ✓'}
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
-                  <div className="mt-2">
-                    <input
-                      type="text"
-                      className="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Or enter custom answer..."
-                      value={selectedAnswers[idx] && !q.options?.some(o => o.label === selectedAnswers[idx]) ? selectedAnswers[idx] : ''}
-                      onChange={(e) => handleSelectAnswer(idx, e.target.value)}
-                    />
-                  </div>
+                  {/* Custom input - only for single select */}
+                  {!q.multiSelect && (
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        className="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Or enter custom answer..."
+                        value={selectedAnswers[idx] && !q.options?.some(o => o.label === selectedAnswers[idx]) ? (selectedAnswers[idx] as string) : ''}
+                        onChange={(e) => handleSelectAnswer(idx, e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {/* Display selected answer(s) */}
                   {selectedAnswers[idx] && (
-                    <p className="mt-2 text-sm text-green-400">Selected: {selectedAnswers[idx]}</p>
+                    <p className="mt-2 text-sm text-green-400">
+                      Selected: {
+                        Array.isArray(selectedAnswers[idx])
+                          ? (selectedAnswers[idx] as string[]).join(', ')
+                          : selectedAnswers[idx]
+                      }
+                    </p>
                   )}
                 </div>
               ))}
 
               <div className="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
                 <p className="text-gray-400 text-sm">
-                  Answered {Object.keys(selectedAnswers).filter(k => selectedAnswers[parseInt(k)]).length} / {pendingQuestion.questions.length}
+                  Answered {pendingQuestion.questions.filter((q, idx) => {
+                    const answer = selectedAnswers[idx]
+                    if (q.multiSelect) {
+                      return Array.isArray(answer) && answer.length > 0
+                    }
+                    return typeof answer === 'string' && answer.length > 0
+                  }).length} / {pendingQuestion.questions.length}
                 </p>
                 <button
                   onClick={handleSubmitAllAnswers}
-                  disabled={!pendingQuestion.questions.every((_, idx) => selectedAnswers[idx])}
+                  disabled={!pendingQuestion.questions.every((q, idx) => {
+                    const answer = selectedAnswers[idx]
+                    if (q.multiSelect) {
+                      return Array.isArray(answer) && answer.length > 0
+                    }
+                    return typeof answer === 'string' && answer.length > 0
+                  })}
                   className="px-6 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
                 >
                   Submit Answers
@@ -470,92 +532,40 @@ export default function Home() {
               Send
             </button>
           </div>
-          <div className="mt-2 text-xs text-gray-500">
-            Status: {state === 'idle' ? 'Ready' : state === 'processing' ? 'Processing' : state === 'waiting_input' ? 'Waiting for input' : 'Complete'}
+          <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
+            <span>
+              Status: {state === 'idle' ? 'Ready' : state === 'processing' ? 'Processing' : state === 'waiting_input' ? 'Waiting for input' : 'Complete'}
+            </span>
+            <span className="flex items-center gap-2">
+              {isDatabaseProject ? (
+                <span className="text-green-400 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Conversation will be saved
+                </span>
+              ) : (
+                <span className="text-yellow-500 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {selectedProject ? 'Local project - not saved' : 'Select a project to save'}
+                </span>
+              )}
+              {planId && <span className="text-gray-600">Plan: {planId.slice(0, 8)}...</span>}
+            </span>
           </div>
         </form>
       </div>
 
       {/* Right Panel - Task List */}
-      <div className="w-96 flex flex-col bg-gray-850">
-        <header className="p-4 border-b border-gray-700">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold">Tasks</h2>
-            {tasks.length > 0 && (
-              <span className="text-sm text-gray-400">{tasks.length} tasks</span>
-            )}
-          </div>
-          {tasks.length > 0 && totalEstimate > 0 && (
-            <p className="text-xs text-gray-500 mt-1">Est. {totalEstimate}h total</p>
-          )}
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-4">
-          {tasks.length === 0 ? (
-            <div className="text-center text-gray-500 mt-10">
-              <p className="text-sm">No tasks yet</p>
-              <p className="text-xs mt-1">Tasks will appear here after planning</p>
-            </div>
-          ) : (
-            <>
-              {/* Priority filters */}
-              <div className="flex gap-2 mb-4">
-                {['All', 'P0', 'P1', 'P2'].map(filter => (
-                  <button
-                    key={filter}
-                    className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-
-              {/* Task cards */}
-              {tasks.map(task => (
-                <TaskCard key={task.id} task={task} />
-              ))}
-            </>
-          )}
-        </div>
-
-        {/* Export buttons */}
-        {tasks.length > 0 && (
-          <div className="p-4 border-t border-gray-700 space-y-2">
-            <button
-              onClick={() => {
-                const json = JSON.stringify(tasks, null, 2)
-                const blob = new Blob([json], { type: 'application/json' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = 'tasks.json'
-                a.click()
-              }}
-              className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
-            >
-              Export JSON
-            </button>
-            <button
-              onClick={() => {
-                const md = tasks.map(t =>
-                  `### [P${t.priority}] ${t.title}\n\n${t.description}\n\n` +
-                  (t.acceptanceCriteria.length ? `**Acceptance Criteria:**\n${t.acceptanceCriteria.map(ac => `- ${ac}`).join('\n')}\n\n` : '') +
-                  (t.estimateHours ? `**Estimate:** ${t.estimateHours}h\n` : '')
-                ).join('\n---\n\n')
-                const blob = new Blob([md], { type: 'text/markdown' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = 'tasks.md'
-                a.click()
-              }}
-              className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
-            >
-              Export Markdown
-            </button>
-          </div>
-        )}
-      </div>
+      <TaskList
+        tasks={tasks}
+        onTasksReorder={setTasks}
+        onTaskUpdate={handleTaskUpdate}
+        onTaskDelete={handleTaskDelete}
+        loading={state === 'processing'}
+      />
     </div>
   )
 }
