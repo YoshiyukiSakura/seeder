@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Seedbed - AI Task Planning',
+  title: 'Seeder - AI Task Planning',
   description: 'Transform ideas into structured tasks',
 }
 

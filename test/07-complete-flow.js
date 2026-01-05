@@ -19,7 +19,7 @@ function runClaude(args, input, timeout = 120000) {
 
     const claude = spawn('claude', fullArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: '/Users/yoshiyuki/WebstormProjects/seedbed'
+      cwd: '/Users/yoshiyuki/WebstormProjects/seeder'
     });
 
     claude.stdin.write(input + '\n');

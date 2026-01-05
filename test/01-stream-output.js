@@ -13,7 +13,7 @@ const claude = spawn('claude', [
   '--verbose'
 ], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  cwd: '/Users/yoshiyuki/WebstormProjects/seedbed'
+  cwd: '/Users/yoshiyuki/WebstormProjects/seeder'
 });
 
 // 发送一个简单提示

@@ -1,8 +1,8 @@
-# Seedbed 产品设计文档
+# Seeder 产品设计文档
 
 > *"Where ideas take root."*
 
-Seedbed 是 AI Agent 工作流的「苗床」—— 通过对话将模糊需求转化为结构化的 Linear Issues，为后续的无人值守编程奠定基础。
+Seeder 是 AI Agent 工作流的「播种机」—— 通过对话将模糊需求转化为结构化的 Linear Issues，为后续的无人值守编程奠定基础。
 
 ---
 
@@ -19,14 +19,14 @@ Seedbed 是 AI Agent 工作流的「苗床」—— 通过对话将模糊需求�
 | 缺乏可视化 | 看不到任务全貌，无法评估工作量 |
 | 与项目管理脱节 | 计划存在本地文件，团队无法协作 |
 
-### 1.2 Seedbed 的解决方案
+### 1.2 Seeder 的解决方案
 
 ```
 开发者需求（模糊）
       │
       ▼
 ┌─────────────────────────────────────────┐
-│              SEEDBED                     │
+│              SEEDER                     │
 │                                          │
 │  1. 对话式需求澄清                        │
 │  2. 自动拆解 + 生成任务                   │
@@ -55,7 +55,7 @@ Linear Issues（结构化、可追踪、可执行）
 ### 2.1 功能架构
 
 ```
-Seedbed
+Seeder
 ├── 🔗 项目连接 (Project Connection)
 │   ├── 连接 Git 仓库（读取结构、README、现有代码）
 │   ├── 连接 Linear 工作区
@@ -89,25 +89,24 @@ Seedbed
 #### 2.2.1 项目连接
 
 **输入方式**：
-1. Git URL（public repo 直接读取，private 需授权）
-2. 本地路径（桌面版）
-3. 上传 ZIP
-4. 纯文本描述（无现有代码的新项目）
+服务器上预先克隆了多个 GitHub 项目，用户通过下拉菜单选择目标项目即可。
 
-**自动提取的上下文**：
-```json
-{
-  "project_name": "my-blog",
-  "tech_stack": ["Next.js", "TypeScript", "Prisma", "PostgreSQL"],
-  "existing_features": ["用户注册", "文章列表"],
-  "directory_structure": "src/pages, src/components, prisma/schema.prisma...",
-  "conventions": {
-    "naming": "camelCase",
-    "test_framework": "vitest",
-    "package_manager": "pnpm"
-  }
-}
 ```
+┌─────────────────────────────────────┐
+│  选择项目                           │
+│  ┌─────────────────────────────┐   │
+│  │ ▾ my-blog                   │   │
+│  │   my-saas-app               │   │
+│  │   internal-tools            │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│  项目路径: /data/repos/my-blog      │
+│  技术栈: Next.js, TypeScript        │
+└─────────────────────────────────────┘
+```
+
+**上下文提取**：
+Claude Code CLI 会自动读取项目结构、README、现有代码，无需手动提取。
 
 #### 2.2.2 对话计划
 
@@ -116,7 +115,7 @@ Seedbed
 ```
 用户: 我想加一个评论功能
 
-Seedbed: 好的，关于评论功能，我需要确认几点：
+Seeder: 好的，关于评论功能，我需要确认几点：
 
 1. 评论层级：支持单层评论还是嵌套回复？
 2. 用户权限：游客可以评论吗，还是必须登录？
@@ -125,7 +124,7 @@ Seedbed: 好的，关于评论功能，我需要确认几点：
 
 用户: 支持嵌套回复，必须登录，不需要审核，要通知作者
 
-Seedbed: 明白了。我已生成 12 个任务，点击「查看计划」预览。
+Seeder: 明白了。我已生成 12 个任务，点击「查看计划」预览。
 
 [查看计划] [继续对话]
 ```
@@ -224,42 +223,61 @@ Seedbed: 明白了。我已生成 12 个任务，点击「查看计划」预览�
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         SEEDBED                                  │
+│                         SEEDER                                  │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │   Frontend  │    │   Backend   │    │  AI Service │         │
-│  │   (Web UI)  │◄──►│    (API)    │◄──►│  (Claude)   │         │
-│  └─────────────┘    └──────┬──────┘    └─────────────┘         │
-│                            │                                    │
-│                            ▼                                    │
-│                    ┌───────────────┐                           │
-│                    │   Database    │                           │
-│                    │  (PostgreSQL) │                           │
-│                    └───────────────┘                           │
+│  ┌─────────────┐    ┌─────────────────────────────────┐        │
+│  │   Frontend  │    │          Backend (API)          │        │
+│  │   (Web UI)  │◄──►│                                 │        │
+│  └─────────────┘    │  ┌───────────────────────────┐  │        │
+│        ▲            │  │   Claude Code CLI         │  │        │
+│        │            │  │   (subprocess)            │  │        │
+│      SSE           │  │   --permission-mode plan   │  │        │
+│                     │  │   --output-format stream  │  │        │
+│                     │  └───────────────────────────┘  │        │
+│                     └─────────────────────────────────┘        │
 │                                                                  │
 ├──────────────────────────────────────────────────────────────────┤
 │                       External Services                          │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │   Linear    │    │   GitHub    │    │   Claude    │         │
-│  │     API     │    │     API     │    │     API     │         │
+│  │   Linear    │    │  本地项目    │    │ Claude CLI  │         │
+│  │     API     │    │  Git Repos  │    │  (已安装)   │         │
 │  └─────────────┘    └─────────────┘    └─────────────┘         │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 技术选型建议
+**核心交互流程**：
+```
+用户需求 → POST /api/claude/start → 启动 Claude CLI subprocess
+                                           ↓
+                                    SSE 流式返回输出
+                                           ↓
+                              检测到 AskUserQuestion → 前端显示问题
+                                           ↓
+用户回答 → POST /api/claude/continue (--continue) → 恢复会话继续处理
+                                           ↓
+                                    返回最终计划结果
+```
 
-| 层级 | 推荐技术 | 理由 |
-|------|---------|------|
-| Frontend | Next.js 14 + TypeScript | SSR、App Router、生态成熟 |
-| UI 组件 | shadcn/ui + Tailwind | 美观、可定制、复制即用 |
-| 拖拽 | @dnd-kit/core | 现代、轻量、React 友好 |
-| Backend | Next.js API Routes 或 FastAPI | 前者全栈统一，后者 Python 生态 |
-| Database | PostgreSQL + Prisma | 类型安全、Linear 也用 PG |
-| AI | Claude API (claude-sonnet-4-20250514) | 性价比高、擅长结构化输出 |
-| 认证 | NextAuth.js | 支持 GitHub OAuth、简单 |
-| 部署 | Vercel / Railway | 快速、自动化 |
+### 3.2 技术选型 (已确定)
+
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| Frontend | Next.js 16 + TypeScript | App Router、全栈统一 |
+| UI 组件 | Tailwind CSS | 快速开发、响应式 |
+| 拖拽 | @dnd-kit/core | (计划看板阶段使用) |
+| Backend | Next.js API Routes | 全栈统一，SSE 支持 |
+| AI | **Claude Code CLI** | subprocess 调用，plan mode |
+| 认证 | NextAuth.js | (后续添加) |
+| Database | PostgreSQL + Prisma | (后续添加) |
+| 部署 | Vercel / 自建服务器 | 需要 Claude CLI 环境 |
+
+**关键技术决策**：
+- 使用 Claude Code CLI 而非直接调用 Claude API
+- CLI 的 `--permission-mode plan` 提供只读规划模式
+- CLI 的 `--continue` 参数实现会话恢复和多轮交互
+- CLI 内置的 `AskUserQuestion` 工具自动处理追问逻辑
 
 ### 3.3 核心数据模型
 
@@ -268,11 +286,15 @@ Seedbed: 明白了。我已生成 12 个任务，点击「查看计划」预览�
 
 model User {
   id            String    @id @default(cuid())
-  email         String    @unique
-  name          String?
-  linearToken   String?   // 加密存储
+  slackUserId   String    @unique      // Slack User ID (唯一标识)
+  slackUsername String                 // Slack 显示名
+  slackTeamId   String?                // Slack 团队 ID
+  email         String?                // 可选
+  avatarUrl     String?                // 头像 URL
+  linearToken   String?                // 加密存储
   projects      Project[]
   createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Project {
@@ -377,172 +399,169 @@ model Conversation {
 
 ## 四、核心 API 设计
 
-### 4.1 对话 API
+### 4.1 Claude 对话 API (SSE)
 
 ```typescript
-// POST /api/plans/:planId/chat
-// 发送消息并获取 AI 回复
+// POST /api/claude/start
+// 启动 Claude CLI 会话，返回 SSE 流
 
-interface ChatRequest {
-  message: string;
-  generateTasks?: boolean;  // 是否同时生成/更新任务
+interface StartRequest {
+  prompt: string;           // 用户需求描述
+  projectPath?: string;     // 项目路径 (从下拉菜单选择)
 }
 
-interface ChatResponse {
-  reply: string;
-  tasks?: Task[];           // 如果 generateTasks=true
-  questions?: string[];     // AI 的追问
+// SSE 事件类型
+type SSEEvent =
+  | { type: 'init'; data: { cwd: string } }
+  | { type: 'text'; data: { content: string } }
+  | { type: 'tool'; data: { name: string } }
+  | { type: 'question'; data: QuestionData }
+  | { type: 'result'; data: { content: string } }
+  | { type: 'error'; data: { message: string } }
+  | { type: 'done'; data: {} }
+
+interface QuestionData {
+  toolUseId: string;
+  questions: Array<{
+    question: string;
+    header?: string;
+    options?: Array<{ label: string; description?: string }>;
+    multiSelect?: boolean;
+  }>;
 }
 ```
 
-### 4.2 任务生成 API
+### 4.2 继续对话 API (SSE)
 
 ```typescript
-// POST /api/plans/:planId/generate-tasks
-// 基于对话历史生成完整任务列表
+// POST /api/claude/continue
+// 发送用户回答并继续会话 (使用 --continue)
 
-interface GenerateTasksRequest {
-  regenerate?: boolean;     // 是否重新生成（覆盖现有）
+interface ContinueRequest {
+  answer: string;           // 用户的回答 (可包含多个问题的答案)
+  projectPath?: string;
 }
 
-interface GenerateTasksResponse {
-  tasks: Task[];
-  coverage: {
-    requirements: string[];
-    covered: boolean[];
-  };
-  warnings: string[];
+// 返回同样的 SSE 流
+```
+
+### 4.3 项目列表 API
+
+```typescript
+// GET /api/projects
+// 获取服务器上已克隆的项目列表
+
+interface ProjectsResponse {
+  projects: Array<{
+    name: string;
+    path: string;
+    description?: string;
+  }>;
 }
 ```
 
-### 4.3 发布 API
+### 4.4 发布到 Linear API (后续实现)
 
 ```typescript
-// POST /api/plans/:planId/publish
-// 发布到 Linear
+// POST /api/linear/publish
+// 将计划结果发布到 Linear
 
 interface PublishRequest {
   linearTeamId: string;
-  projectName?: string;     // 新建项目名（可选）
-  existingProjectId?: string;
-  labelMapping?: Record<string, string>;
-  priorityMapping?: Record<number, string>;
+  projectName: string;
+  tasks: Task[];
 }
 
 interface PublishResponse {
   linearProjectId: string;
   linearProjectUrl: string;
-  issues: {
+  issues: Array<{
     taskId: string;
     linearIssueId: string;
     linearIssueUrl: string;
-  }[];
+  }>;
 }
 ```
 
 ---
 
-## 五、AI Prompt 设计
+## 五、Claude Code CLI 集成
 
-### 5.1 需求澄清 Prompt
+### 5.1 使用内置 Plan Mode
 
-```markdown
-# System Prompt
+**无需自定义 Prompt**：Claude Code CLI 的 `--permission-mode plan` 内置了完整的规划能力。
 
-你是 Seedbed 的计划助手，帮助开发者将模糊的需求转化为清晰的任务列表。
+**CLI 参数**：
+```bash
+# 启动新会话
+claude \
+  --permission-mode plan \
+  --output-format stream-json \
+  --verbose \
+  --print \
+  --cwd /path/to/project \
+  "用户的需求描述"
 
-## 项目上下文
-{project_context}
-
-## 你的任务
-
-1. 理解用户的需求
-2. 识别需求中的模糊点和缺失信息
-3. 通过追问澄清细节
-4. 当信息足够时，生成结构化的任务列表
-
-## 追问原则
-
-- 每次最多问 3-4 个问题
-- 问题要具体，给出选项
-- 优先问影响架构的决策
-- 不要问可以合理假设的细节
-
-## 输出格式
-
-如果需要追问：
-```json
-{
-  "type": "clarification",
-  "message": "你的回复",
-  "questions": ["问题1", "问题2"]
-}
+# 继续会话 (发送回答)
+claude \
+  --permission-mode plan \
+  --output-format stream-json \
+  --verbose \
+  --print \
+  --continue \
+  "用户的回答"
 ```
 
-如果信息足够，可以生成任务：
-```json
-{
-  "type": "ready",
-  "message": "我已理解需求，点击「生成计划」查看任务列表。",
-  "summary": "需求摘要..."
-}
-```
-```
+### 5.2 AskUserQuestion 工具
 
-### 5.2 任务生成 Prompt
+Claude Code 内置的 `AskUserQuestion` 工具会自动：
+- 识别需求中的模糊点
+- 生成结构化的问题和选项
+- 等待用户回答后继续处理
 
-```markdown
-# System Prompt
-
-你是一个资深的技术 Lead，擅长将需求拆解为可执行的开发任务。
-
-## 项目上下文
-{project_context}
-
-## 需求摘要
-{requirement_summary}
-
-## 对话历史
-{conversation_history}
-
-## 任务拆解原则
-
-1. **原子性**：每个任务应该是独立可完成的
-2. **可验证**：每个任务必须有明确的验收标准
-3. **合理粒度**：单个任务 0.5-4 小时，超过则拆分
-4. **依赖清晰**：标注任务间的依赖关系
-5. **标签分类**：后端/前端/测试/文档/基础设施
-
-## 验收标准写法
-
-- 使用可自动化验证的描述
-- 优先写成测试用例的形式
-- 例如："POST /api/comments 返回 201 且数据库有新记录"
-
-## 输出格式
-
-```json
-{
-  "tasks": [
-    {
-      "title": "任务标题",
-      "description": "详细描述...",
-      "priority": 0,  // 0=P0 最高
-      "labels": ["后端", "数据库"],
-      "acceptanceCriteria": [
-        "验收标准1",
-        "验收标准2"
-      ],
-      "relatedFiles": ["prisma/schema.prisma"],
-      "estimateHours": 1.5,
-      "dependsOnIndex": null  // 或依赖的任务索引
+**检测方式**：
+```typescript
+// 在 stream-json 输出中检测
+if (msg.type === 'assistant' && msg.message?.content) {
+  for (const content of msg.message.content) {
+    if (content.type === 'tool_use' && content.name === 'AskUserQuestion') {
+      // content.input.questions 包含问题数组
+      // 每个问题有 question, header, options, multiSelect
     }
-  ],
-  "warnings": [
-    "任务X可能需要额外的Y支持"
-  ]
+  }
 }
 ```
+
+### 5.3 结果提取
+
+**最终结果**在 `result` 消息中：
+```typescript
+if (msg.type === 'result' && msg.subtype === 'success') {
+  const planContent = msg.result;  // 最终的计划内容 (Markdown 格式)
+}
+```
+
+### 5.4 会话管理
+
+**Session ID 机制**：
+- Claude CLI 每次调用返回 `session_id`（在 result 消息中）
+- 使用 `--resume <session_id>` 恢复特定会话（推荐）
+- `--continue` 只恢复"最近"会话，多用户环境不安全
+
+**推荐流程**：
+```typescript
+// 第一次调用
+const result = await runClaude(prompt);
+const sessionId = result.session_id;  // 保存 session_id
+
+// 后续调用 - 使用 --resume
+await runClaude(answer, { resume: sessionId });
+```
+
+**CLI 参数**：
+```bash
+# 恢复特定会话
+claude --resume <session_id> --print ...
 ```
 
 ---
@@ -553,7 +572,7 @@ interface PublishResponse {
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  🌱 Seedbed                    [Projects ▾]  [Settings]  [User] │
+│  🌱 Seeder                    [Projects ▾]  [Settings]  [User] │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌──────────────────────┐  ┌─────────────────────────────────┐ │
@@ -638,7 +657,7 @@ interface PublishResponse {
 ### 7.2 Issue 创建映射
 
 ```typescript
-// Seedbed Task → Linear Issue
+// Seeder Task → Linear Issue
 
 interface LinearIssueCreate {
   title: task.title,
@@ -652,7 +671,7 @@ ${task.acceptanceCriteria.map(c => `- [ ] ${c}`).join('\n')}
 ${task.relatedFiles.map(f => `- \`${f}\``).join('\n')}
 
 ---
-*由 Seedbed 自动创建*
+*由 Seeder 自动创建*
   `,
   priority: priorityMapping[task.priority],
   labelIds: task.labels.map(l => labelMapping[l]),
@@ -687,7 +706,7 @@ ${task.relatedFiles.map(f => `- \`${f}\``).join('\n')}
 {conventions}
 
 ---
-*由 Seedbed 生成于 {timestamp}*
+*由 Seeder 生成于 {timestamp}*
 *计划 ID: {planId}*
 ```
 
@@ -695,12 +714,12 @@ ${task.relatedFiles.map(f => `- \`${f}\``).join('\n')}
 
 ## 八、MVP 范围建议
 
-### Phase 1: 核心流程 (2-3 周)
+### Phase 1: 核心流程
 
-- [ ] 用户认证（GitHub OAuth）
+- [ ] 用户认证（Slack Bot，见附录 A）
 - [ ] 项目创建（手动输入描述）
 - [ ] 对话界面（基础聊天）
-- [ ] AI 生成任务（调用 Claude API）
+- [ ] AI 生成任务（调用 Claude CLI）
 - [ ] 任务列表展示（只读）
 - [ ] 导出 JSON / Markdown
 
@@ -731,6 +750,15 @@ ${task.relatedFiles.map(f => `- \`${f}\``).join('\n')}
 
 ```
 seedbed/
+├── slack-bot/                    # Slack Bot 子项目 (认证服务)
+│   ├── src/
+│   │   ├── index.ts
+│   │   ├── commands/
+│   │   │   └── login.ts
+│   │   └── lib/
+│   │       └── token.ts
+│   ├── package.json
+│   └── .env.example
 ├── app/                          # Next.js App Router
 │   ├── (auth)/
 │   │   ├── login/page.tsx
@@ -739,8 +767,14 @@ seedbed/
 │   │   ├── projects/page.tsx
 │   │   └── projects/[id]/page.tsx
 │   ├── api/
-│   │   ├── auth/[...nextauth]/route.ts
+│   │   ├── auth/
+│   │   │   ├── slack/route.ts        # Slack Token 验证
+│   │   │   ├── token/route.ts        # 生成登录 Token (供 Bot 调用)
+│   │   │   └── logout/route.ts       # 登出
 │   │   ├── projects/route.ts
+│   │   ├── claude/
+│   │   │   ├── start/route.ts
+│   │   │   └── continue/route.ts
 │   │   ├── plans/[id]/chat/route.ts
 │   │   ├── plans/[id]/tasks/route.ts
 │   │   └── plans/[id]/publish/route.ts
@@ -784,23 +818,24 @@ seedbed/
 ```bash
 # .env.example
 
-# Database
+# Database (后续添加)
 DATABASE_URL="postgresql://..."
 
-# Auth
-NEXTAUTH_SECRET="..."
-NEXTAUTH_URL="http://localhost:3000"
-GITHUB_CLIENT_ID="..."
-GITHUB_CLIENT_SECRET="..."
+# Auth - Slack Bot (后续添加)
+AUTH_SECRET="..."                    # JWT 签名密钥
+SLACK_BOT_TOKEN="xoxb-..."           # Slack Bot Token
+SLACK_SIGNING_SECRET="..."           # Slack 请求签名验证
 
-# Linear
+# Linear (后续添加)
 LINEAR_CLIENT_ID="..."
 LINEAR_CLIENT_SECRET="..."
 LINEAR_REDIRECT_URI="http://localhost:3000/api/auth/linear/callback"
 
-# Claude
-ANTHROPIC_API_KEY="sk-ant-..."
-ANTHROPIC_MODEL="claude-sonnet-4-20250514"
+# 项目仓库根目录
+PROJECTS_ROOT="/data/repos"
+
+# 注意: 不需要 ANTHROPIC_API_KEY
+# Claude Code CLI 使用本地已配置的认证
 ```
 
 ---
@@ -809,7 +844,7 @@ ANTHROPIC_MODEL="claude-sonnet-4-20250514"
 
 ### 11.1 输出格式兼容
 
-Seedbed 发布到 Linear 后，下游系统（如 Ralph Wiggum / Linear Harness）可以：
+Seeder 发布到 Linear 后，下游系统（如 Ralph Wiggum / Linear Harness）可以：
 
 1. **通过 Linear API 获取任务**：
    ```typescript
@@ -850,5 +885,288 @@ Seedbed 发布到 Linear 后，下游系统（如 Ralph Wiggum / Linear Harness�
 
 ---
 
-*文档版本: v1.0*
-*最后更新: 2025-01-05*
+## 十二、待办事项 (TODO)
+
+基于验证通过的技术方案，以下是需要实施的具体任务：
+
+### 12.1 Session 管理优化 (高优先级)
+
+- [ ] 修改 `/api/claude/start` - 从 result 消息中提取 `session_id` 并返回给前端
+- [ ] 修改 `/api/claude/continue` - 接收 `sessionId` 参数，使用 `--resume <session_id>` 替代 `--continue`
+- [ ] 前端状态管理 - 保存当前会话的 `sessionId`，每次继续对话时传递
+- [ ] 错误处理 - 处理 session 过期或不存在的情况
+
+### 12.2 API 完善
+
+- [ ] 实现 `/api/projects` - 读取 `PROJECTS_ROOT` 目录下的项目列表
+- [ ] 添加项目详情接口 - 返回项目技术栈、描述等信息
+- [ ] SSE 错误事件 - 统一错误格式，便于前端处理
+
+### 12.3 前端功能
+
+- [ ] 项目下拉选择器 - 调用 `/api/projects` 获取列表
+- [ ] 加载状态优化 - 添加 skeleton loading
+- [ ] 历史对话展示 - 保存并展示完整对话历史
+- [ ] 问题回答 UI - 支持多选 (multiSelect) 问题类型
+
+### 12.4 计划结果处理
+
+- [ ] 解析 result 内容 - 从 Markdown 提取结构化任务
+- [ ] 任务卡片展示 - 右侧面板显示任务列表
+- [ ] 任务编辑功能 - 支持修改任务标题、描述、优先级
+
+### 12.5 数据持久化
+
+- [ ] 配置 Prisma + PostgreSQL
+- [ ] 实现用户认证 (Slack Bot，见附录 A)
+- [ ] 保存对话历史和计划结果
+- [ ] 会话管理 - 支持查看历史计划
+
+### 12.6 Linear 集成 (后期)
+
+- [ ] Linear OAuth 授权流程
+- [ ] 任务发布到 Linear
+- [ ] Issue 状态同步
+
+---
+
+## 附录 A：Slack Bot 认证子项目
+
+### A.1 概述
+
+使用 Slack Bot 作为用户认证入口，利用 Slack 用户 ID 的唯一性建立自有认证体系。
+
+**核心优势**：
+- 团队成员已在 Slack 中，无需额外注册
+- Slack User ID 天然唯一，可作为用户标识
+- 支持私有部署，不依赖第三方 OAuth
+
+### A.2 认证流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        认证流程                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Slack 用户                                                      │
+│      │                                                           │
+│      │ 1. 发送 /seedbed-login                                    │
+│      ▼                                                           │
+│  ┌─────────────┐                                                 │
+│  │  Slack Bot  │                                                 │
+│  └──────┬──────┘                                                 │
+│         │ 2. 获取 Slack User ID + Username                       │
+│         │ 3. 生成一次性登录 Token (有效期 5 分钟)                  │
+│         │ 4. 返回登录链接                                         │
+│         ▼                                                        │
+│  ┌─────────────────────────────────────────────┐                 │
+│  │ 🔗 点击登录 Seedbed                          │                 │
+│  │ https://seedbed.example.com/auth?token=xxx  │                 │
+│  └─────────────────────────────────────────────┘                 │
+│         │                                                        │
+│         │ 5. 用户点击链接                                         │
+│         ▼                                                        │
+│  ┌─────────────┐                                                 │
+│  │  Web 端     │                                                 │
+│  │  /api/auth  │                                                 │
+│  └──────┬──────┘                                                 │
+│         │ 6. 验证 Token                                          │
+│         │ 7. 查找/创建用户记录                                    │
+│         │ 8. 签发 JWT Session                                    │
+│         │ 9. 设置 Cookie                                         │
+│         ▼                                                        │
+│  ┌─────────────┐                                                 │
+│  │  登录成功   │ → 跳转到 Dashboard                               │
+│  └─────────────┘                                                 │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### A.3 数据模型
+
+```prisma
+// User 模型 - 关联 Slack 身份
+model User {
+  id            String    @id @default(cuid())
+  slackUserId   String    @unique      // Slack User ID (唯一标识)
+  slackUsername String                 // Slack 显示名
+  slackTeamId   String?                // Slack 团队 ID
+  email         String?                // 可选，从 Slack profile 获取
+  avatarUrl     String?                // 头像 URL
+
+  // 业务关联
+  projects      Project[]
+  linearToken   String?                // 加密存储
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// 登录 Token 模型 - 一次性令牌
+model LoginToken {
+  id            String    @id @default(cuid())
+  token         String    @unique      // 随机生成的 token
+  slackUserId   String                 // 关联的 Slack User ID
+  slackUsername String                 // Slack 用户名
+  expiresAt     DateTime               // 过期时间 (5 分钟)
+  usedAt        DateTime?              // 使用时间 (null = 未使用)
+
+  createdAt     DateTime  @default(now())
+}
+```
+
+### A.4 Slack Bot 实现
+
+**目录结构** (作为子项目):
+```
+seedbed/
+├── slack-bot/                    # Slack Bot 子项目
+│   ├── src/
+│   │   ├── index.ts              # 入口
+│   │   ├── commands/
+│   │   │   └── login.ts          # /seedbed-login 命令
+│   │   └── lib/
+│   │       └── token.ts          # Token 生成逻辑
+│   ├── package.json
+│   └── .env.example
+├── src/                          # 主项目 (Next.js)
+└── ...
+```
+
+**Slash Command 实现**:
+```typescript
+// slack-bot/src/commands/login.ts
+
+import { App } from '@slack/bolt'
+import { generateLoginToken } from '../lib/token'
+
+export function registerLoginCommand(app: App) {
+  app.command('/seedbed-login', async ({ command, ack, respond }) => {
+    await ack()
+
+    const { user_id, user_name, team_id } = command
+
+    // 生成登录 Token (调用主项目 API 或直接写数据库)
+    const token = await generateLoginToken({
+      slackUserId: user_id,
+      slackUsername: user_name,
+      slackTeamId: team_id,
+    })
+
+    const loginUrl = `${process.env.WEB_URL}/auth?token=${token}`
+
+    await respond({
+      response_type: 'ephemeral',  // 仅发送者可见
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🌱 *登录 Seedbed*\n\n点击下方按钮登录 (链接 5 分钟内有效)`,
+          },
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: '🔗 打开 Seedbed' },
+              url: loginUrl,
+              style: 'primary',
+            },
+          ],
+        },
+      ],
+    })
+  })
+}
+```
+
+### A.5 Web 端认证 API
+
+```typescript
+// src/app/api/auth/slack/route.ts
+
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { SignJWT } from 'jose'
+
+export async function GET(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get('token')
+
+  if (!token) {
+    return NextResponse.redirect('/login?error=missing_token')
+  }
+
+  // 1. 查找并验证 Token
+  const loginToken = await prisma.loginToken.findUnique({
+    where: { token },
+  })
+
+  if (!loginToken) {
+    return NextResponse.redirect('/login?error=invalid_token')
+  }
+
+  if (loginToken.usedAt) {
+    return NextResponse.redirect('/login?error=token_used')
+  }
+
+  if (loginToken.expiresAt < new Date()) {
+    return NextResponse.redirect('/login?error=token_expired')
+  }
+
+  // 2. 标记 Token 已使用
+  await prisma.loginToken.update({
+    where: { id: loginToken.id },
+    data: { usedAt: new Date() },
+  })
+
+  // 3. 查找或创建用户
+  let user = await prisma.user.findUnique({
+    where: { slackUserId: loginToken.slackUserId },
+  })
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        slackUserId: loginToken.slackUserId,
+        slackUsername: loginToken.slackUsername,
+      },
+    })
+  }
+
+  // 4. 签发 JWT
+  const jwt = await new SignJWT({ userId: user.id })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('7d')
+    .sign(new TextEncoder().encode(process.env.AUTH_SECRET))
+
+  // 5. 设置 Cookie 并重定向
+  const response = NextResponse.redirect(new URL('/', request.url))
+  response.cookies.set('auth-token', jwt, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60,  // 7 天
+  })
+
+  return response
+}
+```
+
+### A.6 待办事项
+
+- [ ] **Slack App 配置** - 在 api.slack.com 创建 App，配置 Bot Token Scopes
+- [ ] **Bot 基础框架** - 使用 @slack/bolt 搭建
+- [ ] **Slash Command** - 实现 `/seedbed-login` 命令
+- [ ] **Token 生成 API** - `/api/auth/token/generate` (供 Bot 调用)
+- [ ] **Token 验证 API** - `/api/auth/slack` (Web 端验证)
+- [ ] **JWT 中间件** - 保护需要认证的 API 路由
+- [ ] **用户 Context** - React Context 提供当前用户信息
+- [ ] **登出功能** - 清除 Cookie
+
+---
+
+*文档版本: v1.3*
+*最后更新: 2026-01-05*
+*变更说明: 将 GitHub OAuth 替换为 Slack Bot 认证方案，添加附录 A 详细设计*

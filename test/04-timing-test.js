@@ -14,7 +14,7 @@ const claude = spawn('claude', [
   '--verbose'
 ], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  cwd: '/Users/yoshiyuki/WebstormProjects/seedbed'
+  cwd: '/Users/yoshiyuki/WebstormProjects/seeder'
 });
 
 const prompt = '请问我一个简单的问题来确定接下来的工作方向。';

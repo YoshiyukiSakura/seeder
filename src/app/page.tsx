@@ -206,7 +206,7 @@ export default function Home() {
     <div className="flex flex-col h-screen max-w-4xl mx-auto">
       {/* Header */}
       <header className="p-4 border-b border-gray-700">
-        <h1 className="text-2xl font-bold">Seedbed</h1>
+        <h1 className="text-2xl font-bold">Seeder</h1>
         <p className="text-gray-400 text-sm">AI 任务规划助手 - Claude Code Plan Mode 交互验证</p>
       </header>
 

@@ -14,7 +14,7 @@ const claude = spawn('claude', [
   '--verbose'
 ], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  cwd: '/Users/yoshiyuki/WebstormProjects/seedbed'
+  cwd: '/Users/yoshiyuki/WebstormProjects/seeder'
 });
 
 // 发送一个模糊需求，期望 Claude 会提问

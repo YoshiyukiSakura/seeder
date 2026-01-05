@@ -1,7 +1,7 @@
 {
-  "name": "seedbed",
+  "name": "seeder",
   "version": "1.0.0",
-  "description": "AI Agent workflow seedbed",
+  "description": "AI Agent workflow seeder - 播种机",
   "private": true,
   "scripts": {
     "dev": "next dev",

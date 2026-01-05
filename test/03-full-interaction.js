@@ -204,7 +204,7 @@ class ClaudeInteraction {
 
 // 运行测试
 async function main() {
-  const interaction = new ClaudeInteraction('/Users/yoshiyuki/WebstormProjects/seedbed');
+  const interaction = new ClaudeInteraction('/Users/yoshiyuki/WebstormProjects/seeder');
 
   try {
     const result = await interaction.start(
