@@ -714,14 +714,28 @@ ${task.relatedFiles.map(f => `- \`${f}\``).join('\n')}
 
 ## 八、MVP 范围建议
 
-### Phase 1: 核心流程
+### Phase 1: 核心流程 ✅ (2026-01-05 完成)
 
-- [ ] 用户认证（Slack Bot，见附录 A）
-- [ ] 项目创建（手动输入描述）
-- [ ] 对话界面（基础聊天）
-- [ ] AI 生成任务（调用 Claude CLI）
-- [ ] 任务列表展示（只读）
-- [ ] 导出 JSON / Markdown
+- [x] 用户认证（Slack Bot，见附录 A）
+  - Slack Bot 子项目 (`slack-bot/`)，Socket Mode
+  - `/seedbed-login` 命令生成一次性登录链接
+  - JWT 认证，Cookie 存储
+- [x] 项目创建（手动输入描述）
+  - `/api/projects` CRUD API
+  - `/api/projects/[id]/plans` 计划管理
+- [x] 对话界面（基础聊天）
+  - 左右分栏布局（对话 + 任务列表）
+  - SSE 流式响应
+  - 多轮问答支持 (AskUserQuestion)
+- [x] AI 生成任务（调用 Claude CLI）
+  - `--permission-mode plan` 只读规划模式
+  - `--output-format stream-json` 流式输出
+  - Session 管理 (`--continue`)
+- [x] 任务列表展示（只读）
+  - 任务卡片组件，优先级颜色标识
+  - 验收标准、标签、预估时间展示
+- [x] 导出 JSON / Markdown
+  - 前端下载按钮
 
 ### Phase 2: 编辑能力 (1-2 周)
 
