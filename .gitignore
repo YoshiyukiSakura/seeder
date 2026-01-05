@@ -31,3 +31,6 @@ Thumbs.db
 
 # Test output
 /tmp/
+
+/src/generated/prisma
+tsconfig.tsbuildinfo
