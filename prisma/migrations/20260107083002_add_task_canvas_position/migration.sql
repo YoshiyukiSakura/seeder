@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Task" ADD COLUMN     "blockedByIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN     "positionX" DOUBLE PRECISION,
+ADD COLUMN     "positionY" DOUBLE PRECISION;

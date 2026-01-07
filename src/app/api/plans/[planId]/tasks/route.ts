@@ -22,6 +22,41 @@ interface TaskInput {
   estimateHours?: number
   sortOrder?: number
   blockedBy?: string[]  // 阻塞该任务的其他任务 ID
+  position?: { x: number; y: number }  // 画布位置
+}
+
+// 将数据库任务转换为前端格式（包含 position 对象）
+function transformTask(task: {
+  id: string
+  title: string
+  description: string
+  priority: number
+  labels: string[]
+  acceptanceCriteria: string[]
+  relatedFiles: string[]
+  estimateHours: number | null
+  sortOrder: number
+  blockedByIds: string[]
+  positionX: number | null
+  positionY: number | null
+  linearIssueId: string | null
+}) {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    priority: task.priority,
+    labels: task.labels,
+    acceptanceCriteria: task.acceptanceCriteria,
+    relatedFiles: task.relatedFiles,
+    estimateHours: task.estimateHours,
+    sortOrder: task.sortOrder,
+    blockedBy: task.blockedByIds,
+    linearIssueId: task.linearIssueId,
+    position: task.positionX !== null && task.positionY !== null
+      ? { x: task.positionX, y: task.positionY }
+      : undefined,
+  }
 }
 
 // GET /api/plans/[planId]/tasks
@@ -44,10 +79,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
     }
 
-    const tasks = await prisma.task.findMany({
+    const dbTasks = await prisma.task.findMany({
       where: { planId },
       orderBy: { sortOrder: 'asc' },
     })
+
+    const tasks = dbTasks.map(transformTask)
 
     return NextResponse.json({ tasks })
   } catch (error) {
@@ -99,6 +136,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
               relatedFiles: task.relatedFiles || [],
               estimateHours: task.estimateHours,
               sortOrder: task.sortOrder ?? index,
+              positionX: task.position?.x ?? null,
+              positionY: task.position?.y ?? null,
             },
           })
         )
@@ -149,7 +188,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return created
     })
 
-    return NextResponse.json({ tasks, replaced: true })
+    return NextResponse.json({ tasks: tasks.map(transformTask), replaced: true })
   } catch (error) {
     console.error('Replace tasks error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -207,9 +246,77 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       })
     )
 
-    return NextResponse.json({ tasks }, { status: 201 })
+    return NextResponse.json({ tasks: tasks.map(transformTask) }, { status: 201 })
   } catch (error) {
     console.error('Create tasks error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// PATCH /api/plans/[planId]/tasks - 批量更新任务（位置、属性等）
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const user = await getCurrentUser(request)
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { planId } = await params
+
+  try {
+    const plan = await prisma.plan.findUnique({
+      where: { id: planId },
+    })
+
+    if (!plan) {
+      return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
+    }
+
+    const body = await request.json()
+
+    // 支持批量更新任务
+    interface TaskUpdate {
+      id: string
+      title?: string
+      description?: string
+      priority?: number
+      labels?: string[]
+      acceptanceCriteria?: string[]
+      relatedFiles?: string[]
+      estimateHours?: number
+      sortOrder?: number
+      blockedBy?: string[]
+      position?: { x: number; y: number }
+    }
+
+    const updates: TaskUpdate[] = Array.isArray(body.tasks) ? body.tasks : [body]
+
+    const tasks = await prisma.$transaction(
+      updates.map((update) =>
+        prisma.task.update({
+          where: { id: update.id },
+          data: {
+            ...(update.title !== undefined && { title: update.title }),
+            ...(update.description !== undefined && { description: update.description }),
+            ...(update.priority !== undefined && { priority: update.priority }),
+            ...(update.labels !== undefined && { labels: update.labels }),
+            ...(update.acceptanceCriteria !== undefined && { acceptanceCriteria: update.acceptanceCriteria }),
+            ...(update.relatedFiles !== undefined && { relatedFiles: update.relatedFiles }),
+            ...(update.estimateHours !== undefined && { estimateHours: update.estimateHours }),
+            ...(update.sortOrder !== undefined && { sortOrder: update.sortOrder }),
+            ...(update.blockedBy !== undefined && { blockedByIds: update.blockedBy }),
+            ...(update.position !== undefined && {
+              positionX: update.position.x,
+              positionY: update.position.y,
+            }),
+          },
+        })
+      )
+    )
+
+    return NextResponse.json({ tasks: tasks.map(transformTask) })
+  } catch (error) {
+    console.error('Update tasks error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

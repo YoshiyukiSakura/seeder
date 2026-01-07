@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { TaskList, Task } from '@/components/tasks'
+import { TaskCanvas } from '@/components/tasks/canvas'
 import { UserHeader } from '@/components/UserHeader'
 import { ProjectSelector, Project } from '@/components/ProjectSelector'
 import { ProgressPanel } from '@/components/progress'
 import type { ProgressState, ToolExecution } from '@/types/progress'
 import type { SSEToolData } from '@/lib/sse-types'
-import { getLastActivePlan, saveLastActivePlan } from '@/lib/conversation-storage'
+import { getLastActivePlan, saveLastActivePlan, clearLastActivePlan } from '@/lib/conversation-storage'
 import { convertConversationToMessage, type Message } from '@/lib/conversation-utils'
 import { PlanHistoryPanel } from '@/components/PlanHistoryPanel'
 
@@ -29,6 +30,7 @@ interface SelectedAnswers {
 }
 
 type AppState = 'idle' | 'processing' | 'waiting_input' | 'completed'
+type ViewMode = 'list' | 'canvas'
 
 function HomeContent() {
   const searchParams = useSearchParams()
@@ -54,6 +56,7 @@ function HomeContent() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)  // 选中的项目
   const [isRestoring, setIsRestoring] = useState(false)  // 恢复对话中
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)  // 触发历史列表刷新
+  const [viewMode, setViewMode] = useState<ViewMode>('list')  // 任务视图模式
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // 判断是否是数据库项目（可以保存对话）
@@ -215,6 +218,7 @@ function HomeContent() {
     const decoder = new TextDecoder()
     let buffer = ''
     let hasQuestion = false
+    let receivedSessionId: string | null = null  // 本地追踪 sessionId
 
     if (isInitial) {
       addMessage('assistant', '')
@@ -242,6 +246,14 @@ function HomeContent() {
           const event = JSON.parse(jsonStr)
 
           switch (event.type) {
+            case 'init':
+              // 从 init 事件中获取 sessionId（比 result 更早可用）
+              if (event.data.sessionId) {
+                receivedSessionId = event.data.sessionId
+                setSessionId(event.data.sessionId)
+              }
+              break
+
             case 'text':
               updateLastAssistantMessage(event.data.content)
               break
@@ -292,6 +304,7 @@ function HomeContent() {
               }
               // 保存 sessionId 用于后续继续对话
               if (event.data.sessionId) {
+                receivedSessionId = event.data.sessionId
                 setSessionId(event.data.sessionId)
               }
               // 保存 planId 用于后续继续对话
@@ -320,6 +333,10 @@ function HomeContent() {
 
     if (!hasQuestion) {
       setState('completed')
+    } else if (!receivedSessionId) {
+      // 有问题但没有收到 sessionId，警告用户
+      console.warn('Question received but no sessionId in result')
+      addMessage('system', 'Warning: Session ID was not received. You may need to start a new conversation if submitting answers fails.')
     }
     setCurrentTools([])
     // 标记最后一个工具为完成
@@ -411,8 +428,10 @@ function HomeContent() {
 
     // 检查是否有有效的 sessionId
     if (!sessionId) {
-      addMessage('system', 'Error: Session expired or not found. Please start a new conversation.')
+      addMessage('system', 'Error: No active session found. This may happen if the Claude process ended unexpectedly. Please start a new conversation.')
       setState('idle')
+      setPendingQuestion(null)
+      setSelectedAnswers({})
       return
     }
 
@@ -461,6 +480,10 @@ function HomeContent() {
 
   // 开始新对话
   const handleNewConversation = () => {
+    // 清除 localStorage 中保存的 planId，防止 useEffect 重新恢复对话
+    if (selectedProject?.id) {
+      clearLastActivePlan(selectedProject.id)
+    }
     setMessages([])
     setSessionId(null)
     setPlanId(null)
@@ -536,8 +559,10 @@ function HomeContent() {
         />
       )}
 
-      {/* Center Panel - Chat */}
-      <div className="flex-1 flex flex-col border-r border-gray-700">
+      {/* Center Panel - Chat (hidden in canvas mode) */}
+      <div className={`flex flex-col border-r border-gray-700 transition-all duration-300 ${
+        viewMode === 'canvas' ? 'w-0 opacity-0 overflow-hidden' : 'flex-1'
+      }`}>
         {/* Header */}
         <header className="p-4 border-b border-gray-700">
           <div className="flex items-center justify-between mb-3">
@@ -759,17 +784,67 @@ function HomeContent() {
         </form>
       </div>
 
-      {/* Right Panel - Task List */}
-      <TaskList
-        tasks={tasks}
-        onTasksReorder={setTasks}
-        onTaskUpdate={handleTaskUpdate}
-        onTaskDelete={handleTaskDelete}
-        loading={state === 'processing'}
-        extracting={extractingTasks}
-        canExtract={!!resultContent && tasks.length === 0}
-        onExtract={() => extractAndSetTasks(resultContent)}
-      />
+      {/* Right Panel - Tasks */}
+      <div className={`flex flex-col bg-gray-850 ${viewMode === 'canvas' ? 'flex-1' : ''}`}>
+        {/* View Mode Toggle */}
+        {tasks.length > 0 && (
+          <div className="p-2 border-b border-gray-700 flex justify-center gap-1 shrink-0">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
+              title="List View"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              List
+            </button>
+            <button
+              onClick={() => setViewMode('canvas')}
+              className={`px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition-colors ${
+                viewMode === 'canvas'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
+              title="Canvas View"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+              Canvas
+            </button>
+          </div>
+        )}
+
+        {/* Task View */}
+        {viewMode === 'list' ? (
+          <TaskList
+            tasks={tasks}
+            onTasksReorder={setTasks}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskDelete={handleTaskDelete}
+            planId={planId || undefined}
+            loading={state === 'processing'}
+            extracting={extractingTasks}
+            canExtract={!!resultContent && tasks.length === 0}
+            onExtract={() => extractAndSetTasks(resultContent)}
+          />
+        ) : (
+          <div className="flex-1 w-full h-full min-h-0">
+            <TaskCanvas
+              tasks={tasks}
+              onTasksChange={setTasks}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDelete}
+              planId={planId || undefined}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

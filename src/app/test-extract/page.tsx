@@ -3,8 +3,10 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { TaskList, Task } from '@/components/tasks'
+import { TaskCanvas } from '@/components/tasks/canvas'
 
 type ExtractStep = 'idle' | 'sending' | 'analyzing' | 'parsing' | 'saving' | 'done' | 'error'
+type ViewMode = 'list' | 'canvas'
 
 const STEP_MESSAGES: Record<ExtractStep, string> = {
   idle: '',
@@ -118,6 +120,7 @@ function TestExtractContent() {
   const [error, setError] = useState<string | null>(null)
   const [rawResponse, setRawResponse] = useState<string | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
 
   // 计时器
   useEffect(() => {
@@ -205,8 +208,10 @@ function TestExtractContent() {
 
   return (
     <div className="flex h-screen">
-      {/* Left Panel - Plan Content */}
-      <div className="flex-1 flex flex-col border-r border-gray-700 overflow-hidden">
+      {/* Left Panel - Plan Content (hidden in canvas mode) */}
+      <div className={`flex flex-col border-r border-gray-700 overflow-hidden transition-all duration-300 ${
+        viewMode === 'canvas' ? 'w-0 opacity-0 overflow-hidden' : 'flex-1'
+      }`}>
         <header className="p-4 border-b border-gray-700">
           <h1 className="text-xl font-bold mb-2">Task Extraction Test</h1>
           <div className="flex gap-2">
@@ -313,17 +318,66 @@ function TestExtractContent() {
         </div>
       </div>
 
-      {/* Right Panel - Task List */}
-      <TaskList
-        tasks={tasks}
-        onTasksReorder={setTasks}
-        onTaskUpdate={handleTaskUpdate}
-        onTaskDelete={handleTaskDelete}
-        planId={planId}
-        planName={selectedPlan}
-        loading={false}
-        extracting={isExtracting}
-      />
+      {/* Right Panel - Tasks */}
+      <div className={`flex flex-col bg-gray-850 ${viewMode === 'canvas' ? 'flex-1' : ''}`}>
+        {/* View Mode Toggle */}
+        {tasks.length > 0 && (
+          <div className="p-2 border-b border-gray-700 flex justify-center gap-1 shrink-0">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
+              title="List View"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              List
+            </button>
+            <button
+              onClick={() => setViewMode('canvas')}
+              className={`px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition-colors ${
+                viewMode === 'canvas'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
+              title="Canvas View"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+              Canvas
+            </button>
+          </div>
+        )}
+
+        {/* Task View */}
+        {viewMode === 'list' ? (
+          <TaskList
+            tasks={tasks}
+            onTasksReorder={setTasks}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskDelete={handleTaskDelete}
+            planId={planId}
+            planName={selectedPlan}
+            loading={false}
+            extracting={isExtracting}
+          />
+        ) : (
+          <div className="flex-1 w-full h-full min-h-0">
+            <TaskCanvas
+              tasks={tasks}
+              onTasksChange={setTasks}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDelete}
+              planId={planId}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

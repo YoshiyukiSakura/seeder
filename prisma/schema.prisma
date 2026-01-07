@@ -129,6 +129,10 @@ model Task {
   // 排序
   sortOrder          Int      @default(0)
 
+  // 画布位置 (可选，用于画布视图)
+  positionX          Float?
+  positionY          Float?
+
   // 依赖 (单个，向后兼容)
   dependsOnId        String?
   dependsOn          Task?    @relation("TaskDependency", fields: [dependsOnId], references: [id])
