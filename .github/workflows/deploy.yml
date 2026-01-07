@@ -1,0 +1,66 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 15.235.212.36
+          username: xin
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            # 项目目录
+            APP_DIR="/home/xin/apps/seeder"
+
+            # 如果目录不存在，clone 项目
+            if [ ! -d "$APP_DIR" ]; then
+              echo "Cloning repository..."
+              mkdir -p /home/xin/apps
+              cd /home/xin/apps
+              git clone git@github.com:Wildmeta-ai/seeder.git
+            fi
+
+            cd $APP_DIR
+
+            # 拉取最新代码
+            echo "Pulling latest code..."
+            git fetch origin
+            git reset --hard origin/main
+
+            # 安装依赖
+            echo "Installing dependencies..."
+            npm ci
+
+            # 生成 Prisma Client
+            echo "Generating Prisma client..."
+            npx prisma generate
+
+            # 运行数据库迁移
+            echo "Running database migrations..."
+            npx prisma migrate deploy
+
+            # 构建项目
+            echo "Building project..."
+            npm run build
+
+            # 创建日志目录
+            mkdir -p $APP_DIR/logs
+
+            # 使用 pm2 重启或启动服务
+            echo "Restarting application..."
+            pm2 describe seeder > /dev/null 2>&1 && pm2 restart seeder || pm2 start ecosystem.config.js
+            pm2 save
+
+            echo "Deployment completed successfully!"
+            echo "Application running on port 38964"
