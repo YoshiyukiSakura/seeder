@@ -114,7 +114,8 @@ export async function publishToLinear(
 
         try {
           // 创建 blocks 关系：blockingIssue blocks blockedIssue
-          await client.issueRelationCreate({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (client as any).createIssueRelation({
             issueId: blockingIssueId,
             relatedIssueId: blockedIssueId,
             type: 'blocks',

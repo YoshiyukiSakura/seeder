@@ -5,8 +5,8 @@ const LINEAR_TOKEN = 'lin_api_x8sSVXdZ73DmxlHD6KH9sPsZhjHiYHmwLE0tbrRc'
 async function main() {
   const client = new LinearClient({ apiKey: LINEAR_TOKEN })
 
-  // 搜索 WT-13 到 WT-23 (number 13-23)
-  for (let num = 13; num <= 23; num++) {
+  // 搜索 WT-24 到 WT-35 (number 24-35)
+  for (let num = 24; num <= 35; num++) {
     try {
       // 用 number 过滤
       const issues = await client.issues({
