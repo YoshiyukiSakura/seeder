@@ -4,7 +4,7 @@ module.exports = {
       name: 'seeder',
       script: 'npm',
       args: 'start',
-      cwd: '/home/xin/apps/seeder',
+      cwd: '/home/ubuntu/apps/seeder',
       env: {
         NODE_ENV: 'production',
         PORT: 38964,
@@ -20,8 +20,8 @@ module.exports = {
 
       // 日志配置
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: '/home/xin/apps/seeder/logs/error.log',
-      out_file: '/home/xin/apps/seeder/logs/out.log',
+      error_file: '/home/ubuntu/apps/seeder/logs/error.log',
+      out_file: '/home/ubuntu/apps/seeder/logs/out.log',
       merge_logs: true,
 
       // 健康检查

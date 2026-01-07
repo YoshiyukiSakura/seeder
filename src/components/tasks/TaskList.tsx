@@ -29,11 +29,14 @@ interface TaskListProps {
   planId?: string
   planName?: string
   loading?: boolean
+  extracting?: boolean
+  canExtract?: boolean
+  onExtract?: () => void
 }
 
 type PriorityFilter = 'all' | 0 | 1 | 2 | 3
 
-export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, planId, planName, loading = false }: TaskListProps) {
+export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, planId, planName, loading = false, extracting = false, canExtract = false, onExtract }: TaskListProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
   const [showPublishDialog, setShowPublishDialog] = useState(false)
@@ -82,33 +85,6 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, pl
     setSelectedTaskId(null)
   }
 
-  const handleExportJSON = () => {
-    const json = JSON.stringify(tasks, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'tasks.json'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleExportMarkdown = () => {
-    const md = tasks.map(t =>
-      `### [P${t.priority}] ${t.title}\n\n${t.description}\n\n` +
-      (t.acceptanceCriteria.length ? `**Acceptance Criteria:**\n${t.acceptanceCriteria.map(ac => `- ${ac}`).join('\n')}\n\n` : '') +
-      (t.estimateHours ? `**Estimate:** ${t.estimateHours}h\n` : '') +
-      (t.dependsOnId ? `**Depends on:** ${tasks.find(x => x.id === t.dependsOnId)?.title || t.dependsOnId}\n` : '')
-    ).join('\n---\n\n')
-    const blob = new Blob([md], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'tasks.md'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   return (
     <>
       <div className="w-96 flex flex-col bg-gray-850">
@@ -133,10 +109,33 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, pl
               </p>
               <TaskListSkeleton count={3} />
             </div>
+          ) : extracting ? (
+            <div className="space-y-4">
+              {/* Progress indicator */}
+              <div className="bg-gray-800 rounded-lg p-4 border border-blue-500/50">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="animate-spin h-5 w-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                  <span className="text-blue-400 font-medium">Extracting tasks...</span>
+                </div>
+                <p className="text-xs text-gray-500">Gemini 3 Pro is analyzing your plan</p>
+              </div>
+              <TaskListSkeleton count={3} />
+            </div>
           ) : tasks.length === 0 ? (
             <div className="text-center text-gray-500 mt-10">
               <p className="text-sm">No tasks yet</p>
               <p className="text-xs mt-1">Tasks will appear here after planning</p>
+              {canExtract && onExtract && (
+                <button
+                  onClick={onExtract}
+                  className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  Extract Tasks
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -190,32 +189,17 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, pl
           )}
         </div>
 
-        {/* Export & Publish buttons */}
+        {/* Publish to Linear button */}
         {tasks.length > 0 && (
-          <div className="p-4 border-t border-gray-700 space-y-2">
-            {/* Publish to Linear button */}
-            {planId && (
-              <button
-                onClick={() => setShowPublishDialog(true)}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-                Publish to Linear
-              </button>
-            )}
+          <div className="p-4 border-t border-gray-700">
             <button
-              onClick={handleExportJSON}
-              className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+              onClick={() => setShowPublishDialog(true)}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
-              Export JSON
-            </button>
-            <button
-              onClick={handleExportMarkdown}
-              className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
-            >
-              Export Markdown
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              Publish to Linear
             </button>
           </div>
         )}

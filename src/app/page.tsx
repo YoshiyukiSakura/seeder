@@ -542,7 +542,7 @@ function HomeContent() {
         <header className="p-4 border-b border-gray-700">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h1 className="text-2xl font-bold">Seedbed</h1>
+              <h1 className="text-2xl font-bold">Seeder</h1>
               <p className="text-gray-400 text-sm">AI Task Planning Assistant</p>
             </div>
             <div className="flex items-center gap-3">

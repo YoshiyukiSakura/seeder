@@ -129,10 +129,13 @@ model Task {
   // 排序
   sortOrder          Int      @default(0)
 
-  // 依赖
+  // 依赖 (单个，向后兼容)
   dependsOnId        String?
   dependsOn          Task?    @relation("TaskDependency", fields: [dependsOnId], references: [id])
   dependents         Task[]   @relation("TaskDependency")
+
+  // 多依赖 (blockedBy 的任务 ID 数组)
+  blockedByIds       String[] @default([])
 
   // Linear 同步
   linearIssueId      String?

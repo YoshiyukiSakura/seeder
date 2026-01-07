@@ -1,6 +1,6 @@
 /**
  * Linear 发布逻辑
- * 将 Seedbed 任务发布到 Linear
+ * 将 Seeder 任务发布到 Linear
  */
 import { LinearClient } from '@linear/sdk'
 
@@ -13,6 +13,7 @@ export interface TaskToPublish {
   acceptanceCriteria: string[]
   relatedFiles: string[]
   estimateHours: number | null
+  blockedBy?: string[]  // 阻塞该任务的其他任务 ID 数组
 }
 
 export interface PublishOptions {
@@ -40,8 +41,8 @@ export interface PublishResult {
   errors: string[]
 }
 
-// 优先级映射: Seedbed (0-3) -> Linear (1-4)
-// Seedbed: 0=P0紧急, 1=P1高, 2=P2中, 3=P3低
+// 优先级映射: Seeder (0-3) -> Linear (1-4)
+// Seeder: 0=P0紧急, 1=P1高, 2=P2中, 3=P3低
 // Linear: 0=无, 1=Urgent, 2=High, 3=Medium, 4=Low
 const PRIORITY_MAP: Record<number, number> = {
   0: 1, // P0 -> Urgent
@@ -94,7 +95,39 @@ export async function publishToLinear(
     }
   }
 
-  // 2. 创建 META Issue (可选)
+  // 2. 设置 Blocks 关系
+  // 建立 taskId -> linearIssueId 的映射
+  const taskToIssueMap = new Map<string, string>()
+  for (const result of results) {
+    taskToIssueMap.set(result.taskId, result.linearIssueId)
+  }
+
+  // 遍历所有任务，设置 blocks 关系
+  for (const task of tasks) {
+    if (task.blockedBy && task.blockedBy.length > 0) {
+      const blockedIssueId = taskToIssueMap.get(task.id)
+      if (!blockedIssueId) continue
+
+      for (const blockingTaskId of task.blockedBy) {
+        const blockingIssueId = taskToIssueMap.get(blockingTaskId)
+        if (!blockingIssueId) continue
+
+        try {
+          // 创建 blocks 关系：blockingIssue blocks blockedIssue
+          await client.issueRelationCreate({
+            issueId: blockingIssueId,
+            relatedIssueId: blockedIssueId,
+            type: 'blocks',
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error'
+          errors.push(`Error creating block relation: ${message}`)
+        }
+      }
+    }
+  }
+
+  // 3. 创建 META Issue (可选)
   let metaIssue: PublishResult['metaIssue']
   if (options.createMetaIssue && results.length > 0) {
     try {
@@ -148,7 +181,7 @@ function formatIssueDescription(task: TaskToPublish): string {
     description += task.relatedFiles.map(f => `- \`${f}\``).join('\n')
   }
 
-  description += '\n\n---\n*由 Seedbed 自动创建*'
+  description += '\n\n---\n*由 Seeder 自动创建*'
 
   return description
 }
@@ -186,7 +219,7 @@ function formatMetaIssueDescription(
     description += `- [ ] ${issue.identifier} ${task?.title || ''}\n`
   })
 
-  description += '\n---\n*由 Seedbed 生成*'
+  description += '\n---\n*由 Seeder 生成*'
 
   return description
 }

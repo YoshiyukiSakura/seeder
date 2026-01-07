@@ -14,19 +14,75 @@ export interface ClaudeMessage {
       text?: string
       name?: string
       id?: string
-      input?: {
-        questions?: Array<{
-          question: string
-          header?: string
-          options?: Array<{ label: string; description?: string }>
-          multiSelect?: boolean
-        }>
-      }
+      input?: Record<string, unknown>  // 支持所有工具的参数
     }>
   }
   result?: string
   session_id?: string  // Claude CLI 返回的会话 ID
   tools?: string[]
+}
+
+/**
+ * 根据工具名称和参数生成可读的摘要
+ */
+function generateToolSummary(name: string, input: Record<string, unknown>): string {
+  const truncate = (s: string, max: number) =>
+    s.length > max ? s.slice(0, max) + '...' : s
+
+  const getFileName = (path: string) =>
+    path.split('/').slice(-2).join('/')
+
+  switch (name) {
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+    case 'NotebookEdit':
+      return input.file_path ? getFileName(input.file_path as string) : ''
+
+    case 'Grep':
+      return input.pattern ? `"${truncate(input.pattern as string, 30)}"` : ''
+
+    case 'Glob':
+      return input.pattern ? truncate(input.pattern as string, 40) : ''
+
+    case 'Bash':
+      const cmd = (input.command as string) || ''
+      return truncate(cmd, 50)
+
+    case 'WebSearch':
+      return input.query ? `"${truncate(input.query as string, 30)}"` : ''
+
+    case 'WebFetch':
+      try {
+        return input.url ? new URL(input.url as string).hostname : ''
+      } catch {
+        return truncate((input.url as string) || '', 30)
+      }
+
+    case 'LSP':
+      return `${input.operation || ''} @ L${input.line || '?'}`
+
+    case 'TodoWrite':
+      const todos = input.todos as unknown[]
+      return `${todos?.length || 0} items`
+
+    case 'Task':
+      return input.description ? truncate(input.description as string, 40) : ''
+
+    case 'AskUserQuestion':
+      const questions = input.questions as unknown[]
+      return `${questions?.length || 0} questions`
+
+    default:
+      // 尝试提取第一个有意义的字符串参数
+      for (const key of Object.keys(input)) {
+        const val = input[key]
+        if (typeof val === 'string' && val.length > 0 && val.length < 60) {
+          return truncate(val, 40)
+        }
+      }
+      return ''
+  }
 }
 
 export interface RunClaudeOptions {
@@ -87,7 +143,12 @@ export function runClaude(
           if (msg.type === 'assistant' && msg.message?.content) {
             for (const content of msg.message.content) {
               if (content.type === 'tool_use' && content.name === 'AskUserQuestion') {
-                const questions = content.input?.questions || []
+                const questions = (content.input?.questions || []) as Array<{
+                  question: string
+                  header?: string
+                  options?: Array<{ label: string; description?: string }>
+                  multiSelect?: boolean
+                }>
                 return {
                   type: 'question',
                   data: {
@@ -103,7 +164,17 @@ export function runClaude(
               }
 
               if (content.type === 'tool_use') {
-                return { type: 'tool', data: { name: content.name || 'unknown' } }
+                const toolName = content.name || 'unknown'
+                const toolInput = content.input || {}
+                return {
+                  type: 'tool',
+                  data: {
+                    name: toolName,
+                    id: content.id || `tool_${Date.now()}`,
+                    summary: generateToolSummary(toolName, toolInput),
+                    timestamp: Date.now()
+                  }
+                }
               }
 
               if (content.type === 'text' && content.text) {

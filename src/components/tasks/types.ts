@@ -9,6 +9,7 @@ export interface Task {
   estimateHours?: number
   sortOrder?: number
   dependsOnId?: string | null
+  blockedBy?: string[]  // 阻塞该任务的其他任务 ID 数组
 }
 
 export type TaskUpdateHandler = (taskId: string, updates: Partial<Task>) => void

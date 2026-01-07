@@ -76,6 +76,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       acceptanceCriteria: task.acceptanceCriteria,
       relatedFiles: task.relatedFiles,
       estimateHours: task.estimateHours,
+      blockedBy: task.blockedByIds || [],
     }))
 
     // 发布到 Linear

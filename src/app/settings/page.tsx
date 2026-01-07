@@ -286,7 +286,7 @@ export default function SettingsPage() {
             <ol className="text-sm text-gray-400 space-y-1 list-decimal list-inside">
               <li>Go to <a href="https://linear.app/settings/api" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Linear Settings → API</a></li>
               <li>Click &quot;Personal API Keys&quot;</li>
-              <li>Click &quot;Create key&quot; and enter a name like &quot;Seedbed&quot;</li>
+              <li>Click &quot;Create key&quot; and enter a name like &quot;Seeder&quot;</li>
               <li>Copy the generated key and paste it above</li>
             </ol>
           </div>

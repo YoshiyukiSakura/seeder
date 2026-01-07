@@ -51,7 +51,15 @@ export interface SSEQuestionEvent extends SSEEvent<{
   type: 'question'
 }
 
-export interface SSEToolEvent extends SSEEvent<{ name: string }> {
+// 增强的工具事件数据
+export interface SSEToolData {
+  name: string          // 工具名称
+  id: string            // tool_use_id（用于跟踪）
+  summary?: string      // 参数摘要（如 "src/app/page.tsx"）
+  timestamp: number     // 工具开始时间戳
+}
+
+export interface SSEToolEvent extends SSEEvent<SSEToolData> {
   type: 'tool'
 }
 

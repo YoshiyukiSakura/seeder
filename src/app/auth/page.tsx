@@ -11,10 +11,31 @@ const errorMessages: Record<string, string> = {
   server_error: 'An error occurred. Please try again.',
 }
 
+const isDev = process.env.NODE_ENV === 'development'
+
 function AuthContent() {
   const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [devLoading, setDevLoading] = useState(false)
+
+  const handleDevLogin = async () => {
+    setDevLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/auth/dev-login', { method: 'POST' })
+      if (res.ok) {
+        window.location.href = '/'
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Dev login failed')
+      }
+    } catch {
+      setError('Dev login failed')
+    } finally {
+      setDevLoading(false)
+    }
+  }
 
   useEffect(() => {
     const token = searchParams.get('token')
@@ -47,7 +68,7 @@ function AuthContent() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-gray-800 rounded-lg p-8">
         <h1 className="text-2xl font-bold text-white mb-6 text-center">
-          Seedbed Login
+          Seeder Login
         </h1>
 
         {error ? (
@@ -57,7 +78,7 @@ function AuthContent() {
         ) : null}
 
         <div className="text-gray-300 space-y-4">
-          <p>To log in to Seedbed, use the Slack command:</p>
+          <p>To log in to Seeder, use the Slack command:</p>
           <code className="block bg-gray-900 p-3 rounded text-green-400">
             /seedbed-login
           </code>
@@ -72,6 +93,21 @@ function AuthContent() {
             Don&apos;t have access? Contact your workspace administrator.
           </p>
         </div>
+
+        {isDev && (
+          <div className="mt-6 pt-6 border-t border-yellow-700/50">
+            <p className="text-yellow-500 text-xs text-center mb-3">
+              Development Mode
+            </p>
+            <button
+              onClick={handleDevLogin}
+              disabled={devLoading}
+              className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-800 text-black font-medium py-2 px-4 rounded transition-colors"
+            >
+              {devLoading ? 'Logging in...' : 'Dev Login'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
