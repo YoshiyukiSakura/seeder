@@ -1,17 +1,16 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { TaskList, Task } from '@/components/tasks'
 import { UserHeader } from '@/components/UserHeader'
 import { ProjectSelector, Project } from '@/components/ProjectSelector'
-import { LoadingSpinner } from '@/components/ui'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-}
+import { ProgressPanel } from '@/components/progress'
+import type { ProgressState, ToolExecution } from '@/types/progress'
+import type { SSEToolData } from '@/lib/sse-types'
+import { getLastActivePlan, saveLastActivePlan } from '@/lib/conversation-storage'
+import { convertConversationToMessage, type Message } from '@/lib/conversation-utils'
+import { PlanHistoryPanel } from '@/components/PlanHistoryPanel'
 
 interface Question {
   question: string
@@ -31,68 +30,11 @@ interface SelectedAnswers {
 
 type AppState = 'idle' | 'processing' | 'waiting_input' | 'completed'
 
-// 解析 Claude 输出中的任务
-function parseTasksFromResult(content: string): Task[] {
-  const tasks: Task[] = []
+function HomeContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const urlPlanId = searchParams.get('planId')
 
-  // 尝试匹配常见的任务格式
-  // 格式 1: ## 任务列表 下的 ### 任务标题
-  const taskRegex = /###?\s*(?:\d+\.\s*)?(?:\[P(\d)\]\s*)?(.+?)(?:\n|\r\n)([\s\S]*?)(?=###|\n##|$)/g
-
-  let match
-  let id = 1
-
-  while ((match = taskRegex.exec(content)) !== null) {
-    const priority = match[1] ? parseInt(match[1]) : 2
-    const title = match[2].trim()
-    const body = match[3].trim()
-
-    // 跳过非任务内容
-    if (title.includes('任务列表') || title.includes('计划') || title.includes('概述') || title.length < 3) {
-      continue
-    }
-
-    // 提取验收标准
-    const acMatch = body.match(/验收标准[：:]([\s\S]*?)(?=\n\n|涉及文件|预估|$)/i)
-    const acceptanceCriteria = acMatch
-      ? acMatch[1].split('\n').filter(l => l.trim().startsWith('-') || l.trim().startsWith('*'))
-          .map(l => l.replace(/^[\s\-\*]+/, '').trim())
-          .filter(l => l.length > 0)
-      : []
-
-    // 提取标签
-    const labels: string[] = []
-    if (body.includes('后端') || body.includes('Backend') || body.includes('API')) labels.push('后端')
-    if (body.includes('前端') || body.includes('Frontend') || body.includes('UI')) labels.push('前端')
-    if (body.includes('测试') || body.includes('Test')) labels.push('测试')
-    if (body.includes('数据库') || body.includes('Database') || body.includes('DB')) labels.push('数据库')
-
-    // 提取预估时间
-    const timeMatch = body.match(/预估[：:]?\s*([\d.]+)\s*[hH小时]/i)
-    const estimateHours = timeMatch ? parseFloat(timeMatch[1]) : undefined
-
-    // 提取相关文件
-    const filesMatch = body.match(/(?:涉及文件|相关文件)[：:]([\s\S]*?)(?=\n\n|验收|预估|$)/i)
-    const relatedFiles = filesMatch
-      ? filesMatch[1].split('\n').filter(l => l.trim()).map(l => l.replace(/^[\s\-\*`]+/, '').replace(/`$/, '').trim()).filter(l => l.length > 0)
-      : []
-
-    tasks.push({
-      id: `task-${id++}`,
-      title,
-      description: body.split('\n')[0] || title,
-      priority,
-      labels,
-      acceptanceCriteria,
-      relatedFiles,
-      estimateHours,
-    })
-  }
-
-  return tasks
-}
-
-export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [state, setState] = useState<AppState>('idle')
@@ -100,10 +42,18 @@ export default function Home() {
   const [selectedAnswers, setSelectedAnswers] = useState<SelectedAnswers>({})
   const [currentTools, setCurrentTools] = useState<string[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [extractingTasks, setExtractingTasks] = useState(false)
   const [resultContent, setResultContent] = useState('')
+  const [progressState, setProgressState] = useState<ProgressState>({
+    sessionStartTime: null,
+    tools: [],
+    currentToolId: null
+  })
   const [sessionId, setSessionId] = useState<string | null>(null)  // Claude 会话 ID
   const [planId, setPlanId] = useState<string | null>(null)  // 当前对话关联的 Plan ID
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)  // 选中的项目
+  const [isRestoring, setIsRestoring] = useState(false)  // 恢复对话中
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)  // 触发历史列表刷新
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // 判断是否是数据库项目（可以保存对话）
@@ -117,15 +67,120 @@ export default function Home() {
     scrollToBottom()
   }, [messages])
 
-  // 当收到 result 时解析任务
+  // 恢复对话：优先 URL 参数，其次 localStorage
   useEffect(() => {
-    if (resultContent) {
-      const parsedTasks = parseTasksFromResult(resultContent)
-      if (parsedTasks.length > 0) {
-        setTasks(parsedTasks)
+    const restoreConversation = async () => {
+      // 只有数据库项目才能恢复对话
+      if (!isDatabaseProject || !selectedProject) return
+
+      // 优先使用 URL 参数，其次使用 localStorage
+      const planIdToRestore = urlPlanId || getLastActivePlan(selectedProject.id)
+      if (!planIdToRestore) return
+
+      setIsRestoring(true)
+      try {
+        const response = await fetch(`/api/plans/${planIdToRestore}`)
+        if (response.ok) {
+          const { plan } = await response.json()
+
+          // 验证 plan 属于当前项目
+          if (plan.projectId !== selectedProject.id) {
+            console.warn('Plan belongs to a different project')
+            router.replace('/', { scroll: false })
+            return
+          }
+
+          // 恢复状态
+          setPlanId(plan.id)
+          setSessionId(plan.sessionId)
+
+          // 恢复消息
+          if (plan.conversations && plan.conversations.length > 0) {
+            setMessages(plan.conversations.map(convertConversationToMessage))
+          }
+
+          // 恢复任务
+          if (plan.tasks && plan.tasks.length > 0) {
+            setTasks(plan.tasks.map((t: { id: string; title: string; description: string; priority: number; labels: string[]; acceptanceCriteria: string[]; relatedFiles: string[]; estimateHours: number | null }) => ({
+              id: t.id,
+              title: t.title,
+              description: t.description,
+              priority: t.priority,
+              labels: t.labels,
+              acceptanceCriteria: t.acceptanceCriteria,
+              relatedFiles: t.relatedFiles,
+              estimateHours: t.estimateHours || undefined
+            })))
+          }
+
+          // 更新 URL（如果是从 localStorage 恢复的）
+          if (!urlPlanId) {
+            router.replace(`/?planId=${plan.id}`, { scroll: false })
+          }
+
+          // 如果有 sessionId，设置为 completed 状态
+          if (plan.sessionId) {
+            setState('completed')
+          }
+        } else if (response.status === 404) {
+          // Plan 不存在，清除 URL 参数
+          console.warn('Plan not found:', planIdToRestore)
+          router.replace('/', { scroll: false })
+        }
+      } catch (error) {
+        console.error('Failed to restore conversation:', error)
+      } finally {
+        setIsRestoring(false)
       }
     }
-  }, [resultContent])
+
+    restoreConversation()
+  }, [selectedProject?.id, urlPlanId, isDatabaseProject])
+
+  // planId 变化时更新 URL 和 localStorage
+  useEffect(() => {
+    if (planId && isDatabaseProject && selectedProject) {
+      // 更新 URL
+      const currentUrlPlanId = searchParams.get('planId')
+      if (currentUrlPlanId !== planId) {
+        router.replace(`/?planId=${planId}`, { scroll: false })
+      }
+      // 保存到 localStorage
+      saveLastActivePlan(selectedProject.id, planId)
+    }
+  }, [planId, isDatabaseProject, selectedProject, searchParams, router])
+
+  // 使用 Gemini API 提取任务
+  const extractAndSetTasks = async (planContent: string) => {
+    setExtractingTasks(true)
+    try {
+      const res = await fetch('/api/tasks/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planContent })
+      })
+      if (res.ok) {
+        const { tasks: extractedTasks } = await res.json()
+        if (extractedTasks && extractedTasks.length > 0) {
+          setTasks(extractedTasks)
+          // 如果有 planId，保存任务到数据库
+          if (planId) {
+            await fetch(`/api/plans/${planId}/tasks`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tasks: extractedTasks })
+            })
+          }
+        }
+      } else {
+        console.error('Failed to extract tasks:', await res.text())
+      }
+    } catch (error) {
+      console.error('Task extraction error:', error)
+    } finally {
+      setExtractingTasks(false)
+    }
+  }
 
   const addMessage = (role: Message['role'], content: string) => {
     setMessages(prev => [...prev, {
@@ -163,6 +218,12 @@ export default function Home() {
 
     if (isInitial) {
       addMessage('assistant', '')
+      // 初始化进度状态
+      setProgressState({
+        sessionStartTime: Date.now(),
+        tools: [],
+        currentToolId: null
+      })
     }
 
     while (true) {
@@ -186,7 +247,34 @@ export default function Home() {
               break
 
             case 'tool':
-              setCurrentTools(prev => [...prev, event.data.name])
+              const toolData = event.data as SSEToolData
+              setCurrentTools(prev => [...prev, toolData.name])
+              // 标记前一个工具为完成，添加新工具
+              setProgressState(prev => {
+                const updatedTools = prev.tools.map(t => {
+                  if (t.status === 'running') {
+                    return {
+                      ...t,
+                      status: 'completed' as const,
+                      endTime: toolData.timestamp,
+                      duration: toolData.timestamp - t.startTime
+                    }
+                  }
+                  return t
+                })
+                const newTool: ToolExecution = {
+                  id: toolData.id,
+                  name: toolData.name,
+                  summary: toolData.summary || '',
+                  startTime: toolData.timestamp,
+                  status: 'running'
+                }
+                return {
+                  ...prev,
+                  tools: [...updatedTools, newTool],
+                  currentToolId: toolData.id
+                }
+              })
               break
 
             case 'question':
@@ -198,8 +286,9 @@ export default function Home() {
 
             case 'result':
               if (event.data.content) {
-                setResultContent(event.data.content)
                 updateLastAssistantMessage('\n\n---\n**Plan Complete**\n' + event.data.content)
+                // 保存计划内容，用于手动提取任务
+                setResultContent(event.data.content)
               }
               // 保存 sessionId 用于后续继续对话
               if (event.data.sessionId) {
@@ -208,6 +297,8 @@ export default function Home() {
               // 保存 planId 用于后续继续对话
               if (event.data.planId) {
                 setPlanId(event.data.planId)
+                // 刷新历史列表（新对话创建成功）
+                setHistoryRefreshTrigger(prev => prev + 1)
               }
               break
 
@@ -231,6 +322,22 @@ export default function Home() {
       setState('completed')
     }
     setCurrentTools([])
+    // 标记最后一个工具为完成
+    setProgressState(prev => ({
+      ...prev,
+      tools: prev.tools.map(t => {
+        if (t.status === 'running') {
+          return {
+            ...t,
+            status: 'completed' as const,
+            endTime: Date.now(),
+            duration: Date.now() - t.startTime
+          }
+        }
+        return t
+      }),
+      currentToolId: null
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -352,9 +459,84 @@ export default function Home() {
     setTasks(prev => prev.filter(task => task.id !== taskId))
   }
 
+  // 开始新对话
+  const handleNewConversation = () => {
+    setMessages([])
+    setSessionId(null)
+    setPlanId(null)
+    setTasks([])
+    setPendingQuestion(null)
+    setSelectedAnswers({})
+    setProgressState({ sessionStartTime: null, tools: [], currentToolId: null })
+    setState('idle')
+    router.replace('/', { scroll: false })
+  }
+
+  // 选择历史对话
+  const handleSelectPlan = async (selectedPlanId: string) => {
+    if (selectedPlanId === planId) return
+
+    setIsRestoring(true)
+    try {
+      const res = await fetch(`/api/plans/${selectedPlanId}`)
+      if (res.ok) {
+        const { plan } = await res.json()
+
+        setPlanId(plan.id)
+        setSessionId(plan.sessionId)
+
+        // 恢复消息
+        if (plan.conversations && plan.conversations.length > 0) {
+          setMessages(plan.conversations.map(convertConversationToMessage))
+        } else {
+          setMessages([])
+        }
+
+        // 恢复任务
+        if (plan.tasks && plan.tasks.length > 0) {
+          setTasks(plan.tasks.map((t: { id: string; title: string; description: string; priority: number; labels: string[]; acceptanceCriteria: string[]; relatedFiles: string[]; estimateHours: number | null }) => ({
+            id: t.id,
+            title: t.title,
+            description: t.description,
+            priority: t.priority,
+            labels: t.labels,
+            acceptanceCriteria: t.acceptanceCriteria,
+            relatedFiles: t.relatedFiles,
+            estimateHours: t.estimateHours || undefined
+          })))
+        } else {
+          setTasks([])
+        }
+
+        // 重置其他状态
+        setPendingQuestion(null)
+        setSelectedAnswers({})
+        setProgressState({ sessionStartTime: null, tools: [], currentToolId: null })
+        setState(plan.sessionId ? 'completed' : 'idle')
+
+        router.replace(`/?planId=${plan.id}`, { scroll: false })
+      }
+    } catch (error) {
+      console.error('Failed to select plan:', error)
+    } finally {
+      setIsRestoring(false)
+    }
+  }
+
   return (
     <div className="flex h-screen">
-      {/* Left Panel - Chat */}
+      {/* History Panel - Only for database projects */}
+      {isDatabaseProject && (
+        <PlanHistoryPanel
+          projectId={selectedProject?.id}
+          currentPlanId={planId}
+          onSelectPlan={handleSelectPlan}
+          onNewConversation={handleNewConversation}
+          refreshTrigger={historyRefreshTrigger}
+        />
+      )}
+
+      {/* Center Panel - Chat */}
       <div className="flex-1 flex flex-col border-r border-gray-700">
         {/* Header */}
         <header className="p-4 border-b border-gray-700">
@@ -363,7 +545,22 @@ export default function Home() {
               <h1 className="text-2xl font-bold">Seedbed</h1>
               <p className="text-gray-400 text-sm">AI Task Planning Assistant</p>
             </div>
-            <UserHeader />
+            <div className="flex items-center gap-3">
+              {/* 新对话按钮 - 只有本地项目且有对话时显示（数据库项目在侧边栏有按钮） */}
+              {!isDatabaseProject && messages.length > 0 && (
+                <button
+                  onClick={handleNewConversation}
+                  className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-1"
+                  title="Start new conversation"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New
+                </button>
+              )}
+              <UserHeader />
+            </div>
           </div>
           {/* Project Selector */}
           <ProjectSelector
@@ -375,7 +572,15 @@ export default function Home() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.length === 0 && (
+          {/* 恢复对话中的加载状态 */}
+          {isRestoring && (
+            <div className="text-center text-gray-400 mt-20">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
+              <p className="text-lg">Restoring conversation...</p>
+            </div>
+          )}
+
+          {!isRestoring && messages.length === 0 && (
             <div className="text-center text-gray-500 mt-20">
               <p className="text-lg mb-2">Enter your requirements to start planning</p>
               <p className="text-sm">e.g., &quot;Help me plan a user login feature&quot;</p>
@@ -402,15 +607,11 @@ export default function Home() {
           ))}
 
           {/* Processing indicator */}
-          {state === 'processing' && (
-            <div className="flex justify-start">
-              <div className="bg-gray-700 rounded-lg p-3 flex items-center space-x-2">
-                <LoadingSpinner size="sm" />
-                <span className="text-gray-300 text-sm">
-                  {currentTools.length > 0 ? `Using: ${currentTools[currentTools.length - 1]}` : 'Processing...'}
-                </span>
-              </div>
-            </div>
+          {(state === 'processing' || progressState.tools.length > 0) && (
+            <ProgressPanel
+              state={progressState}
+              isProcessing={state === 'processing'}
+            />
           )}
 
           {/* Question options */}
@@ -565,7 +766,18 @@ export default function Home() {
         onTaskUpdate={handleTaskUpdate}
         onTaskDelete={handleTaskDelete}
         loading={state === 'processing'}
+        extracting={extractingTasks}
+        canExtract={!!resultContent && tasks.length === 0}
+        onExtract={() => extractAndSetTasks(resultContent)}
       />
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   )
 }
