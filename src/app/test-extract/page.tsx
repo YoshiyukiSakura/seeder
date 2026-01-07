@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { TaskList, Task } from '@/components/tasks'
 
@@ -108,7 +108,7 @@ const TEST_PLANS = {
 - 任务状态同步（可选）`
 }
 
-export default function TestExtractPage() {
+function TestExtractContent() {
   const searchParams = useSearchParams()
   const planId = searchParams.get('planId') || undefined
 
@@ -325,5 +325,13 @@ export default function TestExtractPage() {
         extracting={isExtracting}
       />
     </div>
+  )
+}
+
+export default function TestExtractPage() {
+  return (
+    <Suspense fallback={<div className="h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>}>
+      <TestExtractContent />
+    </Suspense>
   )
 }
