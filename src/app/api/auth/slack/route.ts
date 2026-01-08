@@ -6,7 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SignJWT } from 'jose'
-import { basePath } from '@/lib/basePath'
+
+// WEB_URL already includes basePath in production (e.g., https://copilot.wildmeta.ai/seeder)
+const WEB_URL = process.env.WEB_URL || 'http://localhost:3000'
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')
@@ -70,14 +72,13 @@ export async function GET(request: NextRequest) {
       .sign(secret)
 
     // 7. 设置 Cookie 并重定向到首页
-    const baseUrl = new URL(request.url).origin
-    const response = NextResponse.redirect(new URL(`${basePath}/`, baseUrl))
+    const response = NextResponse.redirect(new URL('/', WEB_URL))
     response.cookies.set('auth-token', jwt, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60, // 7 天
-      path: basePath || '/',
+      path: '/',
     })
 
     return response
@@ -87,7 +88,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function redirectWithError(request: NextRequest, error: string) {
-  const baseUrl = new URL(request.url).origin
-  return NextResponse.redirect(new URL(`${basePath}/auth?error=${error}`, baseUrl))
+function redirectWithError(_request: NextRequest, error: string) {
+  return NextResponse.redirect(new URL(`/auth?error=${error}`, WEB_URL))
 }
