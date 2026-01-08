@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Task, TaskUpdateHandler, TaskDeleteHandler } from './types'
+import { detectCycle } from '@/lib/dependency-utils'
 
 interface TaskEditPanelProps {
   task: Task | null
@@ -27,7 +28,7 @@ export function TaskEditPanel({ task, allTasks, onUpdate, onDelete, onClose }: T
   const [labels, setLabels] = useState<string[]>([])
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([])
   const [estimateHours, setEstimateHours] = useState<string>('')
-  const [dependsOnId, setDependsOnId] = useState<string | null>(null)
+  const [blockedBy, setBlockedBy] = useState<string[]>([])
   const [newCriterion, setNewCriterion] = useState('')
 
   // Sync state when task changes
@@ -39,7 +40,7 @@ export function TaskEditPanel({ task, allTasks, onUpdate, onDelete, onClose }: T
       setLabels(task.labels)
       setAcceptanceCriteria(task.acceptanceCriteria)
       setEstimateHours(task.estimateHours?.toString() || '')
-      setDependsOnId(task.dependsOnId || null)
+      setBlockedBy(task.blockedBy || [])
     }
   }, [task])
 
@@ -53,7 +54,7 @@ export function TaskEditPanel({ task, allTasks, onUpdate, onDelete, onClose }: T
       labels,
       acceptanceCriteria,
       estimateHours: estimateHours ? parseFloat(estimateHours) : undefined,
-      dependsOnId,
+      blockedBy,
     })
   }
 
@@ -82,13 +83,42 @@ export function TaskEditPanel({ task, allTasks, onUpdate, onDelete, onClose }: T
     }
   }
 
-  // Get available tasks for dependency (exclude self and dependents)
+  // Get available tasks for dependency (exclude self and tasks that depend on current task)
   const availableForDependency = allTasks.filter(t => {
     if (t.id === task.id) return false
-    // Prevent circular dependencies
-    if (t.dependsOnId === task.id) return false
+    // Prevent direct circular dependencies - if task t is blocked by current task, we can't depend on t
+    if (t.blockedBy?.includes(task.id)) return false
     return true
   })
+
+  // Check if adding a blocker would create a cycle
+  const wouldCreateCycle = useMemo(() => {
+    const result = new Set<string>()
+    for (const t of availableForDependency) {
+      if (!blockedBy.includes(t.id)) {
+        const newBlockedBy = [...blockedBy, t.id]
+        if (detectCycle(task.id, newBlockedBy, allTasks)) {
+          result.add(t.id)
+        }
+      }
+    }
+    return result
+  }, [task.id, blockedBy, allTasks, availableForDependency])
+
+  // Toggle a blocker task
+  const toggleBlocker = (taskId: string) => {
+    if (blockedBy.includes(taskId)) {
+      setBlockedBy(blockedBy.filter(id => id !== taskId))
+    } else {
+      // Check for circular dependency before adding
+      const newBlockedBy = [...blockedBy, taskId]
+      if (detectCycle(task.id, newBlockedBy, allTasks)) {
+        alert('Cannot add this dependency: it would create a circular dependency.')
+        return
+      }
+      setBlockedBy(newBlockedBy)
+    }
+  }
 
   return (
     <div className="fixed inset-y-0 right-0 w-[480px] bg-gray-900 border-l border-gray-700 shadow-xl z-50 flex flex-col">
@@ -233,24 +263,88 @@ export function TaskEditPanel({ task, allTasks, onUpdate, onDelete, onClose }: T
           </div>
         </div>
 
-        {/* Dependencies */}
+        {/* Dependencies - Blocked By */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Depends On</label>
-          <select
-            value={dependsOnId || ''}
-            onChange={(e) => setDependsOnId(e.target.value || null)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">No dependency</option>
-            {availableForDependency.map(t => (
-              <option key={t.id} value={t.id}>
-                [{['P0', 'P1', 'P2', 'P3'][t.priority]}] {t.title}
-              </option>
-            ))}
-          </select>
-          {dependsOnId && (
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Blocked By ({blockedBy.length} task{blockedBy.length !== 1 ? 's' : ''})
+          </label>
+          <div className="max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg p-2 space-y-1">
+            {availableForDependency.length === 0 ? (
+              <p className="text-sm text-gray-500 p-2">No other tasks available</p>
+            ) : (
+              <>
+                {/* Selected tasks first */}
+                {availableForDependency
+                  .filter(t => blockedBy.includes(t.id))
+                  .map(t => (
+                    <label
+                      key={t.id}
+                      className="flex items-center gap-2 p-2 rounded-lg bg-purple-900/30 hover:bg-purple-900/50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        onChange={() => toggleBlocker(t.id)}
+                        className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-purple-500 focus:ring-purple-500"
+                      />
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        t.priority === 0 ? 'bg-red-900/50 text-red-400' :
+                        t.priority === 1 ? 'bg-orange-900/50 text-orange-400' :
+                        t.priority === 2 ? 'bg-yellow-900/50 text-yellow-400' :
+                        'bg-gray-700 text-gray-400'
+                      }`}>
+                        P{t.priority}
+                      </span>
+                      <span className="text-sm text-white truncate">{t.title}</span>
+                    </label>
+                  ))}
+                {/* Unselected tasks */}
+                {availableForDependency
+                  .filter(t => !blockedBy.includes(t.id))
+                  .map(t => {
+                    const isCyclic = wouldCreateCycle.has(t.id)
+                    return (
+                      <label
+                        key={t.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg ${
+                          isCyclic
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'hover:bg-gray-700 cursor-pointer'
+                        }`}
+                        title={isCyclic ? 'Adding this would create a circular dependency' : undefined}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          onChange={() => !isCyclic && toggleBlocker(t.id)}
+                          disabled={isCyclic}
+                          className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-purple-500 focus:ring-purple-500 disabled:opacity-50"
+                        />
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          t.priority === 0 ? 'bg-red-900/50 text-red-400' :
+                          t.priority === 1 ? 'bg-orange-900/50 text-orange-400' :
+                          t.priority === 2 ? 'bg-yellow-900/50 text-yellow-400' :
+                          'bg-gray-700 text-gray-400'
+                        }`}>
+                          P{t.priority}
+                        </span>
+                        <span className="text-sm text-gray-300 truncate flex-1">{t.title}</span>
+                        {isCyclic && (
+                          <span className="text-xs text-orange-400" title="Circular dependency">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                          </span>
+                        )}
+                      </label>
+                    )
+                  })}
+              </>
+            )}
+          </div>
+          {blockedBy.length > 0 && (
             <p className="mt-2 text-xs text-purple-400">
-              This task will be blocked until the dependent task is completed.
+              This task is blocked until the selected task(s) are completed.
             </p>
           )}
         </div>

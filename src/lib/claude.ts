@@ -103,7 +103,7 @@ export function runClaude(
     '--print',
   ]
 
-  // 使用 --resume <sessionId> 恢复特定会话，比 --continue 更精确安全
+  // 使用 --resume <sessionId> 恢复特定会话
   if (sessionId) {
     args.push('--resume', sessionId)
   }
@@ -137,32 +137,45 @@ export function runClaude(
           const msg: ClaudeMessage = JSON.parse(line)
 
           if (msg.type === 'system' && msg.subtype === 'init') {
-            return { type: 'init', data: { cwd, tools: msg.tools?.length || 0 } }
+            // 从 init 消息中捕获 session_id（比 result 消息更早可用）
+            return {
+              type: 'init',
+              data: {
+                cwd,
+                tools: msg.tools?.length || 0,
+                sessionId: msg.session_id  // 这是关键！
+              }
+            }
           }
 
           if (msg.type === 'assistant' && msg.message?.content) {
-            for (const content of msg.message.content) {
-              if (content.type === 'tool_use' && content.name === 'AskUserQuestion') {
-                const questions = (content.input?.questions || []) as Array<{
-                  question: string
-                  header?: string
-                  options?: Array<{ label: string; description?: string }>
-                  multiSelect?: boolean
-                }>
-                return {
-                  type: 'question',
-                  data: {
-                    toolUseId: content.id || '',
-                    questions: questions.map(q => ({
-                      question: q.question,
-                      header: q.header,
-                      options: q.options,
-                      multiSelect: q.multiSelect
-                    }))
-                  }
+            // 优先查找 AskUserQuestion 工具调用（不管在数组中的位置）
+            const askUserQuestion = msg.message.content.find(
+              c => c.type === 'tool_use' && c.name === 'AskUserQuestion'
+            )
+            if (askUserQuestion) {
+              const questions = (askUserQuestion.input?.questions || []) as Array<{
+                question: string
+                header?: string
+                options?: Array<{ label: string; description?: string }>
+                multiSelect?: boolean
+              }>
+              return {
+                type: 'question',
+                data: {
+                  toolUseId: askUserQuestion.id || '',
+                  questions: questions.map(q => ({
+                    question: q.question,
+                    header: q.header,
+                    options: q.options,
+                    multiSelect: q.multiSelect
+                  }))
                 }
               }
+            }
 
+            // 然后处理其他内容
+            for (const content of msg.message.content) {
               if (content.type === 'tool_use') {
                 const toolName = content.name || 'unknown'
                 const toolInput = content.input || {}
@@ -183,24 +196,37 @@ export function runClaude(
             }
           }
 
-          if (msg.type === 'result' && msg.subtype === 'success') {
+          // 处理所有 result 类型
+          if (msg.type === 'result') {
+            // 先处理错误类型
+            if (msg.subtype === 'error') {
+              hasError = true
+              return createSSEError(
+                msg.result || 'Unknown error occurred',
+                'claude_error',
+                { recoverable: false }
+              )
+            }
+
+            // 处理成功类型（success 或 end_turn）
+            if (msg.subtype === 'success' || msg.subtype === 'end_turn') {
+              return {
+                type: 'result',
+                data: {
+                  content: msg.result || '',
+                  sessionId: msg.session_id  // 提取并返回 session_id
+                }
+              }
+            }
+
+            // 其他情况（未知 subtype），仍然尝试返回 result
             return {
               type: 'result',
               data: {
                 content: msg.result || '',
-                sessionId: msg.session_id  // 提取并返回 session_id
+                sessionId: msg.session_id || undefined
               }
             }
-          }
-
-          // 处理 result 错误
-          if (msg.type === 'result' && msg.subtype === 'error') {
-            hasError = true
-            return createSSEError(
-              msg.result || 'Unknown error occurred',
-              'claude_error',
-              { recoverable: false }
-            )
           }
 
           return null

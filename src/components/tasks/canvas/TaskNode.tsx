@@ -147,10 +147,10 @@ function TaskNodeComponent({ data, selected }: TaskNodeProps) {
       )}
 
       {/* 依赖提示 */}
-      {(task.blockedBy?.length || task.dependsOnId) && !isEditing && (
+      {task.blockedBy && task.blockedBy.length > 0 && !isEditing && (
         <div className="mt-2 pt-2 border-t border-gray-700">
           <span className="text-xs text-purple-400">
-            Blocked by {task.blockedBy?.length || 1} task(s)
+            Blocked by {task.blockedBy.length} task{task.blockedBy.length !== 1 ? 's' : ''}
           </span>
         </div>
       )}

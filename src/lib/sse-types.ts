@@ -31,7 +31,7 @@ export interface SSEEvent<T = unknown> {
 }
 
 // 具体事件类型
-export interface SSEInitEvent extends SSEEvent<{ cwd: string; resuming?: boolean; tools?: number }> {
+export interface SSEInitEvent extends SSEEvent<{ cwd: string; resuming?: boolean; tools?: number; sessionId?: string }> {
   type: 'init'
 }
 

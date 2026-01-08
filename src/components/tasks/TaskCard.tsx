@@ -94,9 +94,11 @@ export function TaskCard({ task, isSelected, onSelect, isDragging }: TaskCardPro
         </div>
       )}
 
-      {task.dependsOnId && (
+      {task.blockedBy && task.blockedBy.length > 0 && (
         <div className="mt-2 pt-2 border-t border-gray-700">
-          <span className="text-xs text-purple-400">Depends on task</span>
+          <span className="text-xs text-purple-400">
+            Blocked by {task.blockedBy.length} task{task.blockedBy.length !== 1 ? 's' : ''}
+          </span>
         </div>
       )}
     </div>

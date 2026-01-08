@@ -78,15 +78,42 @@ export async function POST(request: NextRequest) {
       try {
         // 启动新会话（不传 sessionId）
         for await (const event of runClaude({ prompt, cwd })) {
+          // 从 init 事件中捕获 sessionId 并立即保存到数据库
+          // 这样即使 AskUserQuestion 时用户刷新页面，sessionId 也不会丢失
+          if (event.type === 'init' && event.data?.sessionId && !claudeSessionId) {
+            claudeSessionId = event.data.sessionId
+            if (planId) {
+              prisma.plan.update({
+                where: { id: planId },
+                data: { sessionId: claudeSessionId }
+              }).catch(err => console.error('Failed to save sessionId early:', err))
+            }
+          }
+
           // 收集助手消息内容
           if (event.type === 'text' && event.data?.content) {
             assistantContent += event.data.content
           }
 
-          // 捕获 sessionId
-          if (event.type === 'result' && event.data?.sessionId) {
-            claudeSessionId = event.data.sessionId
+          // 当收到 question 事件时，立即保存已收集的 assistant 消息到数据库
+          // 避免用户刷新页面时丢失消息
+          if (event.type === 'question' && planId && assistantContent) {
+            prisma.conversation.create({
+              data: {
+                planId,
+                role: 'assistant',
+                content: assistantContent
+              }
+            }).catch(err => console.error('Failed to save assistant message early:', err))
+            // 标记已保存，避免重复保存
+            assistantContent = ''
+          }
 
+          // 也从 result 事件中捕获 sessionId（作为备份）
+          if (event.type === 'result') {
+            if (event.data?.sessionId && !claudeSessionId) {
+              claudeSessionId = event.data.sessionId
+            }
             // 在 result 事件中添加 planId
             if (planId) {
               event.data.planId = planId

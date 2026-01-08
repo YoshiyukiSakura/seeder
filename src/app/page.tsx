@@ -474,8 +474,32 @@ function HomeContent() {
     ))
   }
 
-  const handleTaskDelete = (taskId: string) => {
-    setTasks(prev => prev.filter(task => task.id !== taskId))
+  const handleTaskDelete = async (taskId: string) => {
+    // 立即从本地状态中移除任务并清理依赖引用
+    setTasks(prev => prev
+      .filter(task => task.id !== taskId)
+      .map(task => ({
+        ...task,
+        blockedBy: task.blockedBy?.filter(id => id !== taskId),
+      }))
+    )
+
+    // 如果有 planId，调用 API 持久化删除
+    if (planId) {
+      try {
+        const response = await fetch(`/api/plans/${planId}/tasks/${taskId}`, {
+          method: 'DELETE',
+        })
+
+        if (!response.ok) {
+          console.error('Failed to delete task from server')
+          // 这里可以考虑显示错误通知，但不回滚本地状态
+          // 因为用户已经看到任务被删除了
+        }
+      } catch (error) {
+        console.error('Error deleting task:', error)
+      }
+    }
   }
 
   // 开始新对话

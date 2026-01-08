@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { validateBlockedBy, TaskWithDependencies } from '@/lib/dependency-utils'
 
 interface RouteParams {
   params: Promise<{ planId: string }>
@@ -290,6 +291,41 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const updates: TaskUpdate[] = Array.isArray(body.tasks) ? body.tasks : [body]
+
+    // 如果有任何更新包含 blockedBy，需要验证循环依赖
+    const updatesWithBlockedBy = updates.filter(u => u.blockedBy !== undefined)
+
+    if (updatesWithBlockedBy.length > 0) {
+      // 获取所有任务用于循环检测
+      const existingTasks = await prisma.task.findMany({
+        where: { planId },
+        select: { id: true, blockedByIds: true },
+      })
+
+      // 将现有任务转换为检测用格式
+      const allTasks: TaskWithDependencies[] = existingTasks.map(t => ({
+        id: t.id,
+        blockedBy: t.blockedByIds,
+      }))
+
+      // 验证每个更新
+      for (const update of updatesWithBlockedBy) {
+        // 创建一个模拟的任务列表，应用当前更新
+        const simulatedTasks = allTasks.map(t =>
+          t.id === update.id
+            ? { ...t, blockedBy: update.blockedBy }
+            : t
+        )
+
+        const validation = validateBlockedBy(update.id, update.blockedBy || [], simulatedTasks)
+        if (!validation.valid) {
+          return NextResponse.json(
+            { error: validation.error || 'Invalid dependency' },
+            { status: 400 }
+          )
+        }
+      }
+    }
 
     const tasks = await prisma.$transaction(
       updates.map((update) =>

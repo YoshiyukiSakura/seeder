@@ -31,28 +31,6 @@ export function useTaskEdges(tasks: Task[]): Edge[] {
           }
         })
       }
-
-      // 向后兼容：从 dependsOnId 生成边
-      if (task.dependsOnId && !task.blockedBy?.includes(task.dependsOnId)) {
-        const blockerExists = tasks.some((t) => t.id === task.dependsOnId)
-        if (blockerExists) {
-          edges.push({
-            id: `${task.dependsOnId}->${task.id}`,
-            source: task.dependsOnId,
-            target: task.id,
-            type: 'dependencyEdge',
-            animated: false,
-            style: {
-              stroke: '#6366f1',
-              strokeWidth: 2,
-            },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: '#6366f1',
-            },
-          })
-        }
-      }
     })
 
     return edges

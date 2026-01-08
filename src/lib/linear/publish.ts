@@ -2,7 +2,7 @@
  * Linear 发布逻辑
  * 将 Seeder 任务发布到 Linear
  */
-import { LinearClient } from '@linear/sdk'
+import { LinearClient, IssueRelationType } from '@linear/sdk'
 
 export interface TaskToPublish {
   id: string
@@ -73,7 +73,7 @@ export async function publishToLinear(
         title: task.title,
         description,
         priority: PRIORITY_MAP[task.priority] ?? 3,
-        estimate: task.estimateHours ?? undefined,
+        estimate: task.estimateHours != null ? Math.round(task.estimateHours) : undefined,
       })
 
       if (issuePayload.success) {
@@ -114,15 +114,21 @@ export async function publishToLinear(
 
         try {
           // 创建 blocks 关系：blockingIssue blocks blockedIssue
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (client as any).createIssueRelation({
+          const relationResult = await client.createIssueRelation({
             issueId: blockingIssueId,
             relatedIssueId: blockedIssueId,
-            type: 'blocks',
+            type: IssueRelationType.Blocks,
           })
+
+          if (relationResult.success) {
+            console.log(`Created block relation: ${blockingIssueId} blocks ${blockedIssueId}`)
+          } else {
+            errors.push(`Failed to create block relation between ${blockingIssueId} and ${blockedIssueId}`)
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error'
           errors.push(`Error creating block relation: ${message}`)
+          console.error(`Error creating block relation:`, error)
         }
       }
     }
