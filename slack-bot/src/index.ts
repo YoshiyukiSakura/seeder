@@ -8,7 +8,7 @@ import { App } from '@slack/bolt'
 import { registerLoginCommand } from './commands/login'
 
 // 验证必需的环境变量
-const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'WEB_URL']
+const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN', 'WEB_URL']
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     console.error(`Missing required environment variable: ${envVar}`)
@@ -16,13 +16,11 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// 初始化 Slack App
+// 初始化 Slack App (Socket Mode)
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  // 使用 Socket Mode 开发时可以设置
-  // socketMode: true,
-  // appToken: process.env.SLACK_APP_TOKEN,
+  socketMode: true,
+  appToken: process.env.SLACK_APP_TOKEN,
 })
 
 // 注册命令
@@ -36,11 +34,9 @@ app.event('app_mention', async ({ event, say }) => {
   })
 })
 
-// 启动应用
-const PORT = Number(process.env.PORT) || 3001
-
+// 启动应用 (Socket Mode)
 ;(async () => {
-  await app.start(PORT)
-  console.log(`Seedbed Slack Bot is running on port ${PORT}`)
+  await app.start()
+  console.log('Seedbed Slack Bot is running in Socket Mode')
   console.log(`Web URL: ${process.env.WEB_URL}`)
 })()
