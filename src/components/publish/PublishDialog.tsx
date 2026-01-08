@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Task } from '@/components/tasks/types'
+import { apiFetch } from '@/lib/basePath'
 
 interface LinearTeam {
   id: string
@@ -61,7 +62,7 @@ export function PublishDialog({ isOpen, onClose, tasks, planId, planName }: Publ
       setLoadingTeams(true)
       setError(null)
       try {
-        const res = await fetch('/api/linear/teams')
+        const res = await apiFetch('/api/linear/teams')
         const data = await res.json()
 
         if (!res.ok) {
@@ -93,7 +94,7 @@ export function PublishDialog({ isOpen, onClose, tasks, planId, planName }: Publ
     async function loadProjects() {
       setLoadingProjects(true)
       try {
-        const res = await fetch(`/api/linear/teams/${selectedTeamId}/projects`)
+        const res = await apiFetch(`/api/linear/teams/${selectedTeamId}/projects`)
         const data = await res.json()
 
         if (res.ok) {
@@ -131,7 +132,7 @@ export function PublishDialog({ isOpen, onClose, tasks, planId, planName }: Publ
     setResult(null)
 
     try {
-      const res = await fetch(`/api/plans/${planId}/publish`, {
+      const res = await apiFetch(`/api/plans/${planId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

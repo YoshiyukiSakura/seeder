@@ -12,6 +12,7 @@ import type { SSEToolData } from '@/lib/sse-types'
 import { getLastActivePlan, saveLastActivePlan, clearLastActivePlan } from '@/lib/conversation-storage'
 import { convertConversationToMessage, type Message } from '@/lib/conversation-utils'
 import { PlanHistoryPanel } from '@/components/PlanHistoryPanel'
+import { apiFetch } from '@/lib/basePath'
 
 interface Question {
   question: string
@@ -82,7 +83,7 @@ function HomeContent() {
 
       setIsRestoring(true)
       try {
-        const response = await fetch(`/api/plans/${planIdToRestore}`)
+        const response = await apiFetch(`/api/plans/${planIdToRestore}`)
         if (response.ok) {
           const { plan } = await response.json()
 
@@ -158,7 +159,7 @@ function HomeContent() {
   const extractAndSetTasks = async (planContent: string) => {
     setExtractingTasks(true)
     try {
-      const res = await fetch('/api/tasks/extract', {
+      const res = await apiFetch('/api/tasks/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planContent })
@@ -169,7 +170,7 @@ function HomeContent() {
           setTasks(extractedTasks)
           // 如果有 planId，保存任务到数据库
           if (planId) {
-            await fetch(`/api/plans/${planId}/tasks`, {
+            await apiFetch(`/api/plans/${planId}/tasks`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ tasks: extractedTasks })
@@ -371,7 +372,7 @@ function HomeContent() {
     setPlanId(null)     // 启动新会话时清空旧的 planId
 
     try {
-      const response = await fetch('/api/claude/start', {
+      const response = await apiFetch('/api/claude/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -450,7 +451,7 @@ function HomeContent() {
     setSelectedAnswers({})
 
     try {
-      const response = await fetch('/api/claude/continue', {
+      const response = await apiFetch('/api/claude/continue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -488,7 +489,7 @@ function HomeContent() {
     // 如果有 planId，调用 API 持久化删除
     if (planId) {
       try {
-        const response = await fetch(`/api/plans/${planId}/tasks/${taskId}`, {
+        const response = await apiFetch(`/api/plans/${planId}/tasks/${taskId}`, {
           method: 'DELETE',
         })
 
@@ -526,7 +527,7 @@ function HomeContent() {
 
     setIsRestoring(true)
     try {
-      const res = await fetch(`/api/plans/${selectedPlanId}`)
+      const res = await apiFetch(`/api/plans/${selectedPlanId}`)
       if (res.ok) {
         const { plan } = await res.json()
 

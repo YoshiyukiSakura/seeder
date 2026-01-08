@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { withBasePath } from '@/lib/basePath'
+import { withBasePath, apiFetch } from '@/lib/basePath'
 
 interface User {
   id: string
@@ -31,7 +31,7 @@ export function UserHeader() {
 
   const fetchUser = async () => {
     try {
-      const res = await fetch('/api/auth/me')
+      const res = await apiFetch('/api/auth/me')
       const data = await res.json()
       if (data.user) {
         setUser(data.user)
@@ -45,7 +45,7 @@ export function UserHeader() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      await apiFetch('/api/auth/logout', { method: 'POST' })
       window.location.href = withBasePath('/auth')
     } catch (error) {
       console.error('Logout failed:', error)

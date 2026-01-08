@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { withBasePath } from '@/lib/basePath'
+import { withBasePath, apiFetch } from '@/lib/basePath'
 
 const errorMessages: Record<string, string> = {
   missing_token: 'Login link is missing or invalid.',
@@ -24,7 +24,7 @@ function AuthContent() {
     setDevLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/auth/dev-login', { method: 'POST' })
+      const res = await apiFetch('/api/auth/dev-login', { method: 'POST' })
       if (res.ok) {
         window.location.href = withBasePath('/')
       } else {

@@ -13,3 +13,11 @@ export function withBasePath(path: string): string {
   }
   return path
 }
+
+/**
+ * Fetch wrapper that automatically prepends basePath to API routes
+ */
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = path.startsWith('/') ? `${basePath}${path}` : path
+  return fetch(url, init)
+}

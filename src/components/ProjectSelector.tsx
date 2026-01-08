@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { apiFetch } from '@/lib/basePath'
 
 // 统一的项目类型（合并数据库项目和本地项目）
 export interface Project {
@@ -64,8 +65,8 @@ export function ProjectSelector({ onSelect, selectedProject, className = '' }: P
       try {
         // 并行请求数据库项目和本地项目
         const [dbResponse, localResponse] = await Promise.all([
-          fetch('/api/projects'),
-          fetch('/api/projects/local')
+          apiFetch('/api/projects'),
+          apiFetch('/api/projects/local')
         ])
 
         const allProjects: Project[] = []

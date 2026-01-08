@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { apiFetch } from '@/lib/basePath'
 
 interface LinearUser {
   id: string
@@ -27,7 +28,7 @@ export default function SettingsPage() {
   useEffect(() => {
     async function loadUserInfo() {
       try {
-        const res = await fetch('/api/auth/me')
+        const res = await apiFetch('/api/auth/me')
         if (res.ok) {
           const data = await res.json()
           setUserInfo({
@@ -56,7 +57,7 @@ export default function SettingsPage() {
     setValidationResult(null)
 
     try {
-      const res = await fetch('/api/linear/validate', {
+      const res = await apiFetch('/api/linear/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: linearToken }),
@@ -89,7 +90,7 @@ export default function SettingsPage() {
     setMessage(null)
 
     try {
-      const res = await fetch('/api/user/linear-token', {
+      const res = await apiFetch('/api/user/linear-token', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ linearToken }),
@@ -125,7 +126,7 @@ export default function SettingsPage() {
     setMessage(null)
 
     try {
-      const res = await fetch('/api/user/linear-token', {
+      const res = await apiFetch('/api/user/linear-token', {
         method: 'DELETE',
       })
 

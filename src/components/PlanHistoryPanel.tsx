@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { apiFetch } from '@/lib/basePath'
 
 interface PlanListItem {
   id: string
@@ -62,7 +63,7 @@ export function PlanHistoryPanel({
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(`/api/projects/${projectId}/plans`)
+        const res = await apiFetch(`/api/projects/${projectId}/plans`)
         if (res.ok) {
           const data = await res.json()
           setPlans(data.plans || [])

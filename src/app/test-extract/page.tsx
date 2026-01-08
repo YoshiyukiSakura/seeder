@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { TaskList, Task } from '@/components/tasks'
 import { TaskCanvas } from '@/components/tasks/canvas'
+import { apiFetch } from '@/lib/basePath'
 
 type ExtractStep = 'idle' | 'sending' | 'analyzing' | 'parsing' | 'saving' | 'done' | 'error'
 type ViewMode = 'list' | 'canvas'
@@ -147,7 +148,7 @@ function TestExtractContent() {
       await new Promise(r => setTimeout(r, 300))
       setStep('analyzing')
 
-      const res = await fetch('/api/tasks/extract', {
+      const res = await apiFetch('/api/tasks/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planContent: TEST_PLANS[selectedPlan] })
@@ -163,7 +164,7 @@ function TestExtractContent() {
         // 如果有 planId，保存到数据库
         if (planId && extractedTasks.length > 0) {
           setStep('saving')
-          const saveRes = await fetch(`/api/plans/${planId}/tasks`, {
+          const saveRes = await apiFetch(`/api/plans/${planId}/tasks`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: extractedTasks })
@@ -215,7 +216,7 @@ function TestExtractContent() {
     // 如果有 planId，调用 API 持久化删除
     if (planId) {
       try {
-        const response = await fetch(`/api/plans/${planId}/tasks/${taskId}`, {
+        const response = await apiFetch(`/api/plans/${planId}/tasks/${taskId}`, {
           method: 'DELETE',
         })
 
