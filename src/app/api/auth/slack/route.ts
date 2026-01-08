@@ -72,7 +72,8 @@ export async function GET(request: NextRequest) {
       .sign(secret)
 
     // 7. 设置 Cookie 并重定向到首页
-    const response = NextResponse.redirect(new URL('/', WEB_URL))
+    // WEB_URL already includes basePath (e.g., https://copilot.wildmeta.ai/seeder)
+    const response = NextResponse.redirect(WEB_URL)
     response.cookies.set('auth-token', jwt, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -89,5 +90,5 @@ export async function GET(request: NextRequest) {
 }
 
 function redirectWithError(_request: NextRequest, error: string) {
-  return NextResponse.redirect(new URL(`/auth?error=${error}`, WEB_URL))
+  return NextResponse.redirect(`${WEB_URL}/auth?error=${error}`)
 }
