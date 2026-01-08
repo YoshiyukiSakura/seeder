@@ -122,8 +122,9 @@ function HomeContent() {
           }
 
           // 如果有 sessionId，设置为 completed 状态
+          // 但如果当前正在等待用户输入（waiting_input），不要覆盖状态
           if (plan.sessionId) {
-            setState('completed')
+            setState(prev => prev === 'waiting_input' ? prev : 'completed')
           }
         } else if (response.status === 404) {
           // Plan 不存在，清除 URL 参数
