@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { withBasePath } from '@/lib/basePath'
 
 interface User {
   id: string
@@ -45,7 +46,7 @@ export function UserHeader() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
-      window.location.href = '/auth'
+      window.location.href = withBasePath('/auth')
     } catch (error) {
       console.error('Logout failed:', error)
     }

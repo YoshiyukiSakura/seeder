@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { withBasePath } from '@/lib/basePath'
 
 const errorMessages: Record<string, string> = {
   missing_token: 'Login link is missing or invalid.',
@@ -25,7 +26,7 @@ function AuthContent() {
     try {
       const res = await fetch('/api/auth/dev-login', { method: 'POST' })
       if (res.ok) {
-        window.location.href = '/'
+        window.location.href = withBasePath('/')
       } else {
         const data = await res.json()
         setError(data.error || 'Dev login failed')
@@ -49,7 +50,7 @@ function AuthContent() {
 
     if (token) {
       // 有 token，重定向到验证 API
-      window.location.href = `/api/auth/slack?token=${token}`
+      window.location.href = withBasePath(`/api/auth/slack?token=${token}`)
     } else {
       // 无 token，显示使用说明
       setLoading(false)

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SignJWT } from 'jose'
+import { basePath } from '@/lib/basePath'
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')
@@ -69,13 +70,14 @@ export async function GET(request: NextRequest) {
       .sign(secret)
 
     // 7. 设置 Cookie 并重定向到首页
-    const response = NextResponse.redirect(new URL('/', request.url))
+    const baseUrl = new URL(request.url).origin
+    const response = NextResponse.redirect(new URL(`${basePath}/`, baseUrl))
     response.cookies.set('auth-token', jwt, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60, // 7 天
-      path: '/',
+      path: basePath || '/',
     })
 
     return response
@@ -86,5 +88,6 @@ export async function GET(request: NextRequest) {
 }
 
 function redirectWithError(request: NextRequest, error: string) {
-  return NextResponse.redirect(new URL(`/auth?error=${error}`, request.url))
+  const baseUrl = new URL(request.url).origin
+  return NextResponse.redirect(new URL(`${basePath}/auth?error=${error}`, baseUrl))
 }
