@@ -109,7 +109,7 @@ export function runClaude(
   const { prompt, cwd, sessionId } = options
 
   const args = [
-    '--permission-mode', 'default',  // 使用 default 模式，允许读取文件；plan 模式限制太多
+    '--permission-mode', 'plan',
     '--output-format', 'stream-json',
     '--verbose',
     '--print',
