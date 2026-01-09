@@ -383,22 +383,38 @@ function HomeContent() {
     addMessage('user', userMessage)
     setState('processing')
     setPendingQuestion(null)
-    setSessionId(null)  // 启动新会话时清空旧的 sessionId
-    setPlanId(null)     // 启动新会话时清空旧的 planId
 
     try {
-      const response = await apiFetch('/api/claude/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: userMessage,
-          projectPath: selectedProject?.path,
-          // 只有数据库项目才传递 projectId，用于创建 Plan 和保存对话
-          projectId: isDatabaseProject ? selectedProject.id : undefined
+      // 如果有 sessionId，继续现有对话；否则创建新对话
+      if (sessionId) {
+        const response = await apiFetch('/api/claude/continue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            answer: userMessage,
+            sessionId,
+            planId,
+            projectPath: selectedProject?.path
+          })
         })
-      })
+        await processSSE(response, true)
+      } else {
+        // 启动新会话时清空旧的状态
+        setSessionId(null)
+        setPlanId(null)
 
-      await processSSE(response, true)
+        const response = await apiFetch('/api/claude/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: userMessage,
+            projectPath: selectedProject?.path,
+            // 只有数据库项目才传递 projectId，用于创建 Plan 和保存对话
+            projectId: isDatabaseProject ? selectedProject.id : undefined
+          })
+        })
+        await processSSE(response, true)
+      }
     } catch (error) {
       addMessage('system', `Request failed: ${error}`)
       setState('idle')
