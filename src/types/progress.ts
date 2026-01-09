@@ -14,7 +14,6 @@ export interface ToolExecution {
   endTime?: number        // 结束时间戳（完成后填充）
   duration?: number       // 执行耗时 (ms)
   status: ToolStatus
-  repeatCount?: number    // 连续重复调用次数（用于合并显示）
 }
 
 // 进度追踪状态

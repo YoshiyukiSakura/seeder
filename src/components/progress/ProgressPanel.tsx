@@ -210,9 +210,6 @@ function ToolExecutionRow({
       {/* 工具图标和名称 */}
       <span className="text-gray-300 text-sm font-medium min-w-[100px] flex-shrink-0">
         {getToolIcon(tool.name)} {tool.name}
-        {tool.repeatCount && tool.repeatCount > 1 && (
-          <span className="ml-1 text-xs text-gray-500">×{tool.repeatCount}</span>
-        )}
       </span>
 
       {/* 参数摘要 */}
