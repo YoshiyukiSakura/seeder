@@ -101,6 +101,7 @@ export function runClaude(
     '--output-format', 'stream-json',
     '--verbose',
     '--print',
+    '--append-system-prompt', `IMPORTANT: When you need to ask the user questions or clarify requirements, you MUST use the AskUserQuestion tool instead of writing questions in your text response. The AskUserQuestion tool will display a proper dialog with options for the user to select from. Never write numbered questions in your text output - always use the AskUserQuestion tool for any user interaction.`,
   ]
 
   // 使用 --resume <sessionId> 恢复特定会话

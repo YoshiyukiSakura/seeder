@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { runClaude } from '@/lib/claude'
 import { createSSEError, encodeSSEEvent } from '@/lib/sse-types'
 import { prisma } from '@/lib/prisma'
+import { DbNull } from '@/generated/prisma/internal/prismaNamespace'
 
 export async function POST(request: NextRequest) {
   let body: { answer?: string; projectPath?: string; sessionId?: string; planId?: string }
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
       // 清除 pendingQuestion，因为用户已经回答
       await prisma.plan.update({
         where: { id: planId },
-        data: { pendingQuestion: null }
+        data: { pendingQuestion: DbNull }
       })
     } catch (dbError) {
       console.error('Database error saving user answer:', dbError)
