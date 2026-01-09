@@ -1,8 +1,20 @@
 import { spawn } from 'child_process'
+import { existsSync } from 'fs'
+import { homedir } from 'os'
+import { join } from 'path'
 import {
   type AnySSEEvent,
   createSSEError,
 } from './sse-types'
+
+// 优先使用 ~/.local/bin/claude（新版本支持更多功能），否则使用系统 PATH 中的 claude
+function getClaudePath(): string {
+  const localClaudePath = join(homedir(), '.local', 'bin', 'claude')
+  if (existsSync(localClaudePath)) {
+    return localClaudePath
+  }
+  return 'claude'
+}
 
 export interface ClaudeMessage {
   type: 'system' | 'assistant' | 'user' | 'result'
@@ -112,7 +124,8 @@ export function runClaude(
 
   args.push(prompt)
 
-  const claude = spawn('claude', args, {
+  const claudePath = getClaudePath()
+  const claude = spawn(claudePath, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd,
   })
