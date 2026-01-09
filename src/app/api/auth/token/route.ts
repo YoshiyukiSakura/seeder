@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
     // 生成随机 Token
     const token = randomBytes(32).toString('hex')
 
-    // Token 有效期 5 分钟
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+    // Token 有效期 1 年（实际上不限制）
+    const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
 
     // 保存到数据库
     await prisma.loginToken.create({

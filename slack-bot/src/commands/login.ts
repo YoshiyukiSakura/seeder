@@ -32,7 +32,7 @@ export function registerLoginCommand(app: App) {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `*Seedbed Login*\n\nHi ${user_name}! Click the button below to log in to Seedbed.\n\n_This link expires in 5 minutes._`,
+              text: `*Seeder Login*\n\nHi ${user_name}! Click the button below to log in to Seeder.`,
             },
           },
           {
@@ -40,7 +40,7 @@ export function registerLoginCommand(app: App) {
             elements: [
               {
                 type: 'button',
-                text: { type: 'plain_text', text: 'Open Seedbed', emoji: true },
+                text: { type: 'plain_text', text: 'Open Seeder', emoji: true },
                 url: loginUrl,
                 style: 'primary',
               },

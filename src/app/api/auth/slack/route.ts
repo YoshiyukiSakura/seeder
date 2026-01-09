@@ -27,22 +27,6 @@ export async function GET(request: NextRequest) {
       return redirectWithError(request, 'invalid_token')
     }
 
-    // 2. 检查是否已使用
-    if (loginToken.usedAt) {
-      return redirectWithError(request, 'token_used')
-    }
-
-    // 3. 检查是否过期
-    if (loginToken.expiresAt < new Date()) {
-      return redirectWithError(request, 'token_expired')
-    }
-
-    // 4. 标记 Token 已使用
-    await prisma.loginToken.update({
-      where: { id: loginToken.id },
-      data: { usedAt: new Date() },
-    })
-
     // 5. 查找或创建用户
     let user = await prisma.user.findUnique({
       where: { slackUserId: loginToken.slackUserId },
