@@ -1,5 +1,5 @@
 /**
- * /seedbed-login Slash Command
+ * /seeder-login Slash Command
  * 生成一次性登录链接并发送给用户
  */
 
@@ -7,7 +7,7 @@ import { App } from '@slack/bolt'
 import { generateLoginToken } from '../lib/token'
 
 export function registerLoginCommand(app: App) {
-  app.command('/seedbed-login', async ({ command, ack, respond }) => {
+  app.command('/seeder-login', async ({ command, ack, respond }) => {
     // 立即确认收到命令
     await ack()
 
