@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Task } from '@/components/tasks/types'
-import { apiFetch } from '@/lib/basePath'
+import { apiFetch, withBasePath } from '@/lib/basePath'
 
 interface LinearTeam {
   id: string
@@ -267,7 +267,7 @@ export function PublishDialog({ isOpen, onClose, tasks, planId, planName }: Publ
                     You need to configure your Linear API Key before publishing tasks.
                   </p>
                   <a
-                    href="/settings"
+                    href={withBasePath('/settings')}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm font-medium transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
