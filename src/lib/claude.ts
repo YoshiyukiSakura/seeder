@@ -85,6 +85,10 @@ function generateToolSummary(name: string, input: Record<string, unknown>): stri
       const questions = input.questions as unknown[]
       return `${questions?.length || 0} questions`
 
+    case 'ExitPlanMode':
+    case 'EnterPlanMode':
+      return 'Plan mode'
+
     default:
       // 尝试提取第一个有意义的字符串参数
       for (const key of Object.keys(input)) {

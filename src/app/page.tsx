@@ -174,11 +174,18 @@ function HomeContent() {
           setTasks(extractedTasks)
           // 如果有 planId，保存任务到数据库
           if (planId) {
-            await apiFetch(`/api/plans/${planId}/tasks`, {
+            const saveRes = await apiFetch(`/api/plans/${planId}/tasks`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ tasks: extractedTasks })
             })
+            if (!saveRes.ok) {
+              console.error('Failed to save tasks to database:', await saveRes.text())
+            } else {
+              console.log('Tasks saved to database successfully')
+            }
+          } else {
+            console.warn('No planId available, tasks not saved to database')
           }
         }
       } else {
