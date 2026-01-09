@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   const cwd = projectPath || process.cwd()
 
-  // 保存用户回答到数据库
+  // 保存用户回答到数据库，并清除 pendingQuestion（用户已回答）
   if (planId) {
     try {
       await prisma.conversation.create({
@@ -55,6 +55,11 @@ export async function POST(request: NextRequest) {
           role: 'user',
           content: answer
         }
+      })
+      // 清除 pendingQuestion，因为用户已经回答
+      await prisma.plan.update({
+        where: { id: planId },
+        data: { pendingQuestion: null }
       })
     } catch (dbError) {
       console.error('Database error saving user answer:', dbError)
@@ -72,6 +77,29 @@ export async function POST(request: NextRequest) {
           // 收集助手消息内容
           if (event.type === 'text' && event.data?.content) {
             assistantContent += event.data.content
+          }
+
+          // 处理新的问题事件（Claude 可能会继续提问）
+          if (event.type === 'question' && planId) {
+            // 保存当前 assistant 消息
+            if (assistantContent) {
+              prisma.conversation.create({
+                data: {
+                  planId,
+                  role: 'assistant',
+                  content: assistantContent
+                }
+              }).catch(err => console.error('Failed to save assistant message early:', err))
+              assistantContent = ''
+            }
+
+            // 保存新的 pendingQuestion
+            if (event.data?.questions?.length > 0) {
+              prisma.plan.update({
+                where: { id: planId },
+                data: { pendingQuestion: event.data }
+              }).catch(err => console.error('Failed to save pendingQuestion:', err))
+            }
           }
 
           // 在 result 事件中添加 planId

@@ -57,6 +57,7 @@ model Plan {
   description     String?
   status          PlanStatus     @default(DRAFT)
   sessionId       String?
+  pendingQuestion Json?          // 存储待回答的问题数据 {toolUseId, questions}
   linearProjectId String?
   publishedAt     DateTime?
   createdAt       DateTime       @default(now())

@@ -117,15 +117,19 @@ function HomeContent() {
             })))
           }
 
+          // 恢复 pendingQuestion（如果有未回答的问题）
+          if (plan.pendingQuestion && plan.pendingQuestion.questions?.length > 0) {
+            setPendingQuestion(plan.pendingQuestion)
+            setSelectedAnswers({})
+            setState('waiting_input')
+          } else if (plan.sessionId) {
+            // 如果没有待回答问题但有 sessionId，设置为 completed 状态
+            setState('completed')
+          }
+
           // 更新 URL（如果是从 localStorage 恢复的）
           if (!urlPlanId) {
             router.replace(`/?planId=${plan.id}`, { scroll: false })
-          }
-
-          // 如果有 sessionId，设置为 completed 状态
-          // 但如果当前正在等待用户输入（waiting_input），不要覆盖状态
-          if (plan.sessionId) {
-            setState(prev => prev === 'waiting_input' ? prev : 'completed')
           }
         } else if (response.status === 404) {
           // Plan 不存在，清除 URL 参数
@@ -292,10 +296,14 @@ function HomeContent() {
               break
 
             case 'question':
-              hasQuestion = true
-              setPendingQuestion(event.data)
-              setSelectedAnswers({})
-              setState('waiting_input')
+              // 只保留第一个有效的 question 事件，忽略后续的
+              // （Claude 可能从主 agent 和 Task 子 agent 发送多个 AskUserQuestion）
+              if (!hasQuestion && event.data?.questions?.length > 0) {
+                hasQuestion = true
+                setPendingQuestion(event.data)
+                setSelectedAnswers({})
+                setState('waiting_input')
+              }
               break
 
             case 'result':

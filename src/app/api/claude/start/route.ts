@@ -95,18 +95,29 @@ export async function POST(request: NextRequest) {
             assistantContent += event.data.content
           }
 
-          // 当收到 question 事件时，立即保存已收集的 assistant 消息到数据库
-          // 避免用户刷新页面时丢失消息
-          if (event.type === 'question' && planId && assistantContent) {
-            prisma.conversation.create({
-              data: {
-                planId,
-                role: 'assistant',
-                content: assistantContent
-              }
-            }).catch(err => console.error('Failed to save assistant message early:', err))
-            // 标记已保存，避免重复保存
-            assistantContent = ''
+          // 当收到 question 事件时，立即保存已收集的 assistant 消息和问题数据到数据库
+          // 避免用户刷新页面时丢失消息和问题弹窗
+          if (event.type === 'question' && planId) {
+            // 保存 assistant 消息
+            if (assistantContent) {
+              prisma.conversation.create({
+                data: {
+                  planId,
+                  role: 'assistant',
+                  content: assistantContent
+                }
+              }).catch(err => console.error('Failed to save assistant message early:', err))
+              // 标记已保存，避免重复保存
+              assistantContent = ''
+            }
+
+            // 保存 pendingQuestion 数据，刷新页面后可以恢复问题弹窗
+            if (event.data?.questions?.length > 0) {
+              prisma.plan.update({
+                where: { id: planId },
+                data: { pendingQuestion: event.data }
+              }).catch(err => console.error('Failed to save pendingQuestion:', err))
+            }
           }
 
           // 也从 result 事件中捕获 sessionId（作为备份）
