@@ -268,7 +268,32 @@ function HomeContent() {
               const toolData = event.data as SSEToolData
               setCurrentTools(prev => [...prev, toolData.name])
               // 标记前一个工具为完成，添加新工具
+              // 如果新工具与上一个工具相同（连续重复），则合并计数而不是新增
               setProgressState(prev => {
+                const lastTool = prev.tools[prev.tools.length - 1]
+                const isSameTool = lastTool && lastTool.name === toolData.name
+
+                if (isSameTool) {
+                  // 合并到上一个工具，增加重复计数
+                  const updatedTools = prev.tools.map((t, idx) => {
+                    if (idx === prev.tools.length - 1) {
+                      return {
+                        ...t,
+                        repeatCount: (t.repeatCount || 1) + 1,
+                        // 保持 running 状态
+                        status: 'running' as const
+                      }
+                    }
+                    return t
+                  })
+                  return {
+                    ...prev,
+                    tools: updatedTools,
+                    currentToolId: lastTool.id
+                  }
+                }
+
+                // 不同的工具，正常处理
                 const updatedTools = prev.tools.map(t => {
                   if (t.status === 'running') {
                     return {
