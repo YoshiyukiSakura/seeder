@@ -114,6 +114,7 @@ export function runClaude(
 
   const args = [
     '--permission-mode', 'plan',
+    '--dangerously-skip-permissions',
     '--output-format', 'stream-json',
     '--verbose',
     '--print',
