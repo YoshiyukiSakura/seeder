@@ -1,6 +1,11 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  // Avoid mis-detected workspace root when multiple lockfiles exist.
+  turbopack: {
+    root: process.cwd(),
+  },
+
   // 生产环境部署在 /seeder 子路径
   basePath: process.env.NODE_ENV === 'production' ? '/seeder' : '',
 

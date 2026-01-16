@@ -63,7 +63,6 @@ export type User = {
   slackTeamId: string | null
   email: string | null
   avatarUrl: string | null
-  linearToken: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -89,7 +88,6 @@ export type Plan = {
   description: string | null
   status: string
   sessionId: string | null
-  linearProjectId: string | null
   publishedAt: Date | null
   createdAt: Date
   updatedAt: Date
@@ -107,7 +105,6 @@ export type Task = {
   estimateHours: number | null
   sortOrder: number
   dependsOnId: string | null
-  linearIssueId: string | null
   createdAt: Date
   updatedAt: Date
 }

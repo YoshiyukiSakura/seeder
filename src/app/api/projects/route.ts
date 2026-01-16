@@ -66,8 +66,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 })
     }
 
+    const projectId =
+      typeof body.id === 'string' && body.id.trim().length > 0
+        ? body.id.trim()
+        : undefined
+
+    if (projectId) {
+      const existing = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { id: true },
+      })
+
+      if (existing) {
+        return NextResponse.json(
+          { error: 'Project already exists', projectId },
+          { status: 409 }
+        )
+      }
+    }
+
     const project = await prisma.project.create({
       data: {
+        ...(projectId ? { id: projectId } : {}),
         name: body.name,
         description: body.description,
         userId: user.id,

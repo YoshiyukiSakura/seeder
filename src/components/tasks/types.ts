@@ -1,3 +1,14 @@
+// 执行状态（来自 Farmer 的 IssueExecution）
+export interface TaskExecutionStatus {
+  status: 'PENDING' | 'WAITING_DEPS' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | null
+  gitStatus: 'NOT_STARTED' | 'BRANCH_CREATED' | 'COMMITTED' | 'PUSHED' | 'PR_CREATED' | null
+  prUrl: string | null
+  prNumber: number | null
+  error: string | null
+  startedAt: string | null
+  completedAt: string | null
+}
+
 export interface Task {
   id: string
   title: string
@@ -15,6 +26,8 @@ export interface Task {
     x: number
     y: number
   }
+  // 执行状态（来自 Farmer）
+  execution?: TaskExecutionStatus
 }
 
 // 任务依赖边 (用于画布视图)

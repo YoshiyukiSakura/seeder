@@ -46,7 +46,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         estimateHours: task.estimateHours,
         sortOrder: task.sortOrder,
         blockedBy: task.blockedByIds,
-        linearIssueId: task.linearIssueId,
         position: task.positionX !== null && task.positionY !== null
           ? { x: task.positionX, y: task.positionY }
           : undefined,

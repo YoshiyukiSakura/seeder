@@ -22,7 +22,7 @@ const config = {
     '/src/generated/',
   ],
   transformIgnorePatterns: [
-    '/node_modules/(?!(jose|@linear/sdk)/)',
+    '/node_modules/(?!(jose)/)',
     '/src/generated/',
   ],
   collectCoverageFrom: [

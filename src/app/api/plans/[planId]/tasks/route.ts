@@ -26,7 +26,20 @@ interface TaskInput {
   position?: { x: number; y: number }  // 画布位置
 }
 
-// 将数据库任务转换为前端格式（包含 position 对象）
+// IssueExecution 类型（来自 Farmer）
+interface IssueExecutionData {
+  status: string
+  error: string | null
+  startedAt: Date | null
+  completedAt: Date | null
+  execution: {
+    gitStatus: string
+    prUrl: string | null
+    prNumber: number | null
+  }
+}
+
+// 将数据库任务转换为前端格式（包含 position 对象和执行状态）
 function transformTask(task: {
   id: string
   title: string
@@ -40,8 +53,11 @@ function transformTask(task: {
   blockedByIds: string[]
   positionX: number | null
   positionY: number | null
-  linearIssueId: string | null
+  issueExecutions?: IssueExecutionData[]
 }) {
+  // 获取最新的执行状态
+  const latestExecution = task.issueExecutions?.[0]
+
   return {
     id: task.id,
     title: task.title,
@@ -53,10 +69,19 @@ function transformTask(task: {
     estimateHours: task.estimateHours,
     sortOrder: task.sortOrder,
     blockedBy: task.blockedByIds,
-    linearIssueId: task.linearIssueId,
     position: task.positionX !== null && task.positionY !== null
       ? { x: task.positionX, y: task.positionY }
       : undefined,
+    // 执行状态（来自 Farmer 的 IssueExecution）
+    execution: latestExecution ? {
+      status: latestExecution.status,
+      gitStatus: latestExecution.execution.gitStatus,
+      prUrl: latestExecution.execution.prUrl,
+      prNumber: latestExecution.execution.prNumber,
+      error: latestExecution.error,
+      startedAt: latestExecution.startedAt?.toISOString() ?? null,
+      completedAt: latestExecution.completedAt?.toISOString() ?? null,
+    } : undefined,
   }
 }
 
@@ -83,6 +108,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const dbTasks = await prisma.task.findMany({
       where: { planId },
       orderBy: { sortOrder: 'asc' },
+      include: {
+        issueExecutions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            status: true,
+            error: true,
+            startedAt: true,
+            completedAt: true,
+            execution: {
+              select: {
+                gitStatus: true,
+                prUrl: true,
+                prNumber: true,
+              }
+            }
+          }
+        }
+      }
     })
 
     const tasks = dbTasks.map(transformTask)

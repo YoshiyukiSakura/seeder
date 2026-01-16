@@ -47,9 +47,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, isSelected }) => {
       {task.estimateHours && (
         <span className="estimate" data-testid="estimate">{task.estimateHours}h</span>
       )}
-      {(task as any).linearIssueId && (
-        <span data-testid="linear-linked-icon">Linear</span>
-      )}
     </article>
   )
 }
@@ -165,22 +162,6 @@ describe('TaskCard Component', () => {
       render(<TaskCard task={task} isSelected={false} />)
 
       expect(screen.getByTestId('task-card')).not.toHaveClass('selected')
-    })
-  })
-
-  describe('Linear Integration', () => {
-    it('should show Linear icon when linearIssueId present', () => {
-      const task = { ...createMockTask(), linearIssueId: 'issue123' }
-      render(<TaskCard task={task} />)
-
-      expect(screen.getByTestId('linear-linked-icon')).toBeInTheDocument()
-    })
-
-    it('should not show Linear icon when linearIssueId not present', () => {
-      const task = createMockTask()
-      render(<TaskCard task={task} />)
-
-      expect(screen.queryByTestId('linear-linked-icon')).not.toBeInTheDocument()
     })
   })
 

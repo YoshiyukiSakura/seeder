@@ -18,7 +18,6 @@ import {
 import { Task, TaskUpdateHandler, TaskDeleteHandler } from './types'
 import { TaskCard } from './TaskCard'
 import { TaskEditPanel } from './TaskEditPanel'
-import { PublishDialog } from '../publish/PublishDialog'
 import { TaskListSkeleton } from '../ui/Skeleton'
 
 interface TaskListProps {
@@ -26,20 +25,22 @@ interface TaskListProps {
   onTasksReorder: (tasks: Task[]) => void
   onTaskUpdate: TaskUpdateHandler
   onTaskDelete: TaskDeleteHandler
-  planId?: string
-  planName?: string
   loading?: boolean
   extracting?: boolean
   canExtract?: boolean
   onExtract?: () => void
+  planId?: string | null
+  planStatus?: string
+  onPublish?: () => void
+  projectId?: string | null
+  onSaveAsPlan?: (name: string) => Promise<void>
 }
 
 type PriorityFilter = 'all' | 0 | 1 | 2 | 3
 
-export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, planId, planName, loading = false, extracting = false, canExtract = false, onExtract }: TaskListProps) {
+export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, loading = false, extracting = false, canExtract = false, onExtract, planId, planStatus, onPublish }: TaskListProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
-  const [showPublishDialog, setShowPublishDialog] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -98,6 +99,26 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, pl
           </div>
           {tasks.length > 0 && totalEstimate > 0 && (
             <p className="text-xs text-gray-500 mt-1">Est. {totalEstimate}h total</p>
+          )}
+          {/* Publish Button */}
+          {planId && tasks.length > 0 && planStatus !== 'PUBLISHED' && onPublish && (
+            <button
+              onClick={onPublish}
+              className="mt-3 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Publish Plan
+            </button>
+          )}
+          {planStatus === 'PUBLISHED' && (
+            <div className="mt-3 px-3 py-2 bg-green-900/30 border border-green-700 text-green-400 rounded-lg text-sm flex items-center gap-2">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Published
+            </div>
           )}
         </header>
 
@@ -189,20 +210,6 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, pl
           )}
         </div>
 
-        {/* Publish to Linear button */}
-        {tasks.length > 0 && (
-          <div className="p-4 border-t border-gray-700">
-            <button
-              onClick={() => setShowPublishDialog(true)}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-              Publish to Linear
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Edit Panel */}
@@ -218,16 +225,6 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, pl
         />
       )}
 
-      {/* Publish Dialog */}
-      {planId && (
-        <PublishDialog
-          isOpen={showPublishDialog}
-          onClose={() => setShowPublishDialog(false)}
-          tasks={tasks}
-          planId={planId}
-          planName={planName || 'Untitled Plan'}
-        />
-      )}
     </>
   )
 }

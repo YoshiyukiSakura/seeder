@@ -14,7 +14,6 @@ export function createMockUser(overrides: Partial<{
   slackTeamId: string | null
   email: string | null
   avatarUrl: string | null
-  linearToken: string | null
 }> = {}) {
   return {
     id: 'user_123',
@@ -23,7 +22,6 @@ export function createMockUser(overrides: Partial<{
     slackTeamId: 'T12345',
     email: 'test@example.com',
     avatarUrl: null,
-    linearToken: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -67,7 +65,6 @@ export function createMockPlan(overrides: Partial<{
     projectId: 'proj_123',
     status: 'DRAFT',
     sessionId: null,
-    linearProjectId: null,
     publishedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -183,48 +180,6 @@ export function createMockRequest(options: {
   })
 
   return request
-}
-
-// ============ Linear Mock ============
-
-export function createMockLinearClient() {
-  return {
-    viewer: Promise.resolve({
-      id: 'linear_user_123',
-      name: 'Linear User',
-      email: 'linear@example.com',
-    }),
-    teams: jest.fn().mockResolvedValue({
-      nodes: [
-        { id: 'team_1', name: 'Engineering', key: 'ENG' },
-        { id: 'team_2', name: 'Design', key: 'DES' },
-      ],
-    }),
-    team: jest.fn().mockReturnValue({
-      projects: jest.fn().mockResolvedValue({
-        nodes: [
-          { id: 'proj_1', name: 'Project A', state: 'started' },
-          { id: 'proj_2', name: 'Project B', state: 'planned' },
-        ],
-      }),
-    }),
-    workflowStates: jest.fn().mockResolvedValue({
-      nodes: [
-        { id: 'state_1', name: 'Backlog', type: 'backlog', color: '#666' },
-        { id: 'state_2', name: 'Todo', type: 'unstarted', color: '#888' },
-        { id: 'state_3', name: 'In Progress', type: 'started', color: '#0066ff' },
-        { id: 'state_4', name: 'Done', type: 'completed', color: '#00cc00' },
-      ],
-    }),
-    createIssue: jest.fn().mockResolvedValue({
-      success: true,
-      issue: Promise.resolve({
-        id: 'issue_123',
-        url: 'https://linear.app/team/issue/ENG-123',
-        identifier: 'ENG-123',
-      }),
-    }),
-  }
 }
 
 // ============ Claude CLI Mock ============

@@ -43,6 +43,7 @@ function HomeContent() {
   const [state, setState] = useState<AppState>('idle')
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null)
   const [selectedAnswers, setSelectedAnswers] = useState<SelectedAnswers>({})
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false)  // 答案提交中状态
   const [currentTools, setCurrentTools] = useState<string[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [extractingTasks, setExtractingTasks] = useState(false)
@@ -54,6 +55,7 @@ function HomeContent() {
   })
   const [sessionId, setSessionId] = useState<string | null>(null)  // Claude 会话 ID
   const [planId, setPlanId] = useState<string | null>(null)  // 当前对话关联的 Plan ID
+  const [planStatus, setPlanStatus] = useState<string>('DRAFT')  // Plan 状态
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)  // 选中的项目
   const [isRestoring, setIsRestoring] = useState(false)  // 恢复对话中
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)  // 触发历史列表刷新
@@ -97,6 +99,7 @@ function HomeContent() {
           // 恢复状态
           setPlanId(plan.id)
           setSessionId(plan.sessionId)
+          setPlanStatus(plan.status || 'DRAFT')
 
           // 恢复消息
           if (plan.conversations && plan.conversations.length > 0) {
@@ -350,6 +353,9 @@ function HomeContent() {
 
     if (!hasQuestion) {
       setState('completed')
+      // 没有新问题时，清空旧的问题状态
+      setPendingQuestion(null)
+      setSelectedAnswers({})
     } else if (!receivedSessionId) {
       // 有问题但没有收到 sessionId，警告用户
       console.warn('Question received but no sessionId in result')
@@ -444,7 +450,7 @@ function HomeContent() {
   }
 
   const handleSubmitAllAnswers = async () => {
-    if (state !== 'waiting_input' || !pendingQuestion) return
+    if (state !== 'waiting_input' || !pendingQuestion || isSubmittingAnswer) return
 
     // Check all questions are answered (multiSelect: array length > 0, single: non-empty string)
     const allAnswered = pendingQuestion.questions.every((q, idx) => {
@@ -468,6 +474,9 @@ function HomeContent() {
       return
     }
 
+    // 标记开始提交（保留问题UI显示提交状态）
+    setIsSubmittingAnswer(true)
+
     const combinedAnswer = pendingQuestion.questions.map((q, idx) => {
       const header = q.header || `Question ${idx + 1}`
       const answer = selectedAnswers[idx]
@@ -478,8 +487,8 @@ function HomeContent() {
 
     addMessage('user', combinedAnswer)
     setState('processing')
-    setPendingQuestion(null)
-    setSelectedAnswers({})
+    // 注意：不要在这里清空 pendingQuestion 和 selectedAnswers
+    // 保留它们以便在提交过程中显示已选状态
 
     try {
       const response = await apiFetch('/api/claude/continue', {
@@ -497,6 +506,8 @@ function HomeContent() {
     } catch (error) {
       addMessage('system', `Request failed: ${error}`)
       setState('idle')
+    } finally {
+      setIsSubmittingAnswer(false)
     }
   }
 
@@ -549,7 +560,33 @@ function HomeContent() {
     setSelectedAnswers({})
     setProgressState({ sessionStartTime: null, tools: [], currentToolId: null })
     setState('idle')
+    setPlanStatus('DRAFT')
     router.replace('/', { scroll: false })
+  }
+
+  // 发布 Plan
+  const handlePublish = async () => {
+    if (!planId) return
+
+    try {
+      const res = await apiFetch(`/api/plans/${planId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'PUBLISHED',
+        })
+      })
+
+      if (res.ok) {
+        setPlanStatus('PUBLISHED')
+        // 刷新历史列表
+        setHistoryRefreshTrigger(prev => prev + 1)
+      } else {
+        console.error('Failed to publish plan')
+      }
+    } catch (error) {
+      console.error('Publish error:', error)
+    }
   }
 
   // 选择历史对话
@@ -564,6 +601,7 @@ function HomeContent() {
 
         setPlanId(plan.id)
         setSessionId(plan.sessionId)
+        setPlanStatus(plan.status || 'DRAFT')
 
         // 恢复消息
         if (plan.conversations && plan.conversations.length > 0) {
@@ -697,8 +735,13 @@ function HomeContent() {
           )}
 
           {/* Question options */}
-          {state === 'waiting_input' && pendingQuestion && (
-            <div className="bg-gray-800 rounded-lg p-4 border border-blue-500">
+          {(state === 'waiting_input' || isSubmittingAnswer) && pendingQuestion && (
+            <div className={`bg-gray-800 rounded-lg p-4 border border-blue-500 ${isSubmittingAnswer ? 'opacity-70' : ''}`}>
+              {isSubmittingAnswer && (
+                <div className="mb-3 p-2 bg-green-800/50 rounded text-green-400 text-sm flex items-center gap-2">
+                  <span className="animate-pulse">...</span> Submitting answers...
+                </div>
+              )}
               <p className="text-blue-400 font-medium mb-3">
                 Please answer the following {pendingQuestion.questions.length} question(s):
               </p>
@@ -726,10 +769,13 @@ function HomeContent() {
                           <button
                             key={optIdx}
                             onClick={() => handleSelectAnswer(idx, opt.label, q.multiSelect)}
+                            disabled={isSubmittingAnswer}
                             className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                              isSubmittingAnswer ? 'cursor-not-allowed' : ''
+                            } ${
                               isSelected
                                 ? 'bg-green-600 text-white ring-2 ring-green-400'
-                                : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
+                                : 'bg-gray-600 hover:bg-gray-500 text-gray-200 disabled:hover:bg-gray-600'
                             }`}
                             title={opt.description}
                           >
@@ -746,7 +792,8 @@ function HomeContent() {
                     <div className="mt-2">
                       <input
                         type="text"
-                        className="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isSubmittingAnswer}
+                        className="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         placeholder="Or enter custom answer..."
                         value={selectedAnswers[idx] && !q.options?.some(o => o.label === selectedAnswers[idx]) ? (selectedAnswers[idx] as string) : ''}
                         onChange={(e) => handleSelectAnswer(idx, e.target.value)}
@@ -778,7 +825,7 @@ function HomeContent() {
                 </p>
                 <button
                   onClick={handleSubmitAllAnswers}
-                  disabled={!pendingQuestion.questions.every((q, idx) => {
+                  disabled={isSubmittingAnswer || !pendingQuestion.questions.every((q, idx) => {
                     const answer = selectedAnswers[idx]
                     if (q.multiSelect) {
                       return Array.isArray(answer) && answer.length > 0
@@ -787,7 +834,7 @@ function HomeContent() {
                   })}
                   className="px-6 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
                 >
-                  Submit Answers
+                  {isSubmittingAnswer ? 'Submitting...' : 'Submit Answers'}
                 </button>
               </div>
             </div>
@@ -884,11 +931,13 @@ function HomeContent() {
             onTasksReorder={setTasks}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={handleTaskDelete}
-            planId={planId || undefined}
             loading={state === 'processing'}
             extracting={extractingTasks}
             canExtract={!!resultContent && tasks.length === 0}
             onExtract={() => extractAndSetTasks(resultContent)}
+            planId={planId}
+            planStatus={planStatus}
+            onPublish={handlePublish}
           />
         ) : (
           <div className="flex-1 w-full h-full min-h-0">
@@ -897,7 +946,6 @@ function HomeContent() {
               onTasksChange={setTasks}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDelete}
-              planId={planId || undefined}
             />
           </div>
         )}

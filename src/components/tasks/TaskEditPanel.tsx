@@ -21,6 +21,25 @@ const priorityOptions = [
 
 const labelOptions = ['backend', 'frontend', 'test', 'database', 'API', 'UI']
 
+// 执行状态配置
+const executionStatusConfig: Record<string, { label: string; className: string }> = {
+  PENDING: { label: '待执行', className: 'bg-gray-600 text-gray-200' },
+  WAITING_DEPS: { label: '等待依赖', className: 'bg-purple-600 text-purple-100' },
+  RUNNING: { label: '执行中', className: 'bg-blue-600 text-blue-100' },
+  COMPLETED: { label: '已完成', className: 'bg-green-600 text-green-100' },
+  FAILED: { label: '失败', className: 'bg-red-600 text-red-100' },
+  SKIPPED: { label: '跳过', className: 'bg-yellow-600 text-yellow-100' },
+}
+
+// Git 操作状态步骤
+const gitStatusSteps = [
+  { key: 'NOT_STARTED', label: '未开始' },
+  { key: 'BRANCH_CREATED', label: '分支已创建' },
+  { key: 'COMMITTED', label: '代码已提交' },
+  { key: 'PUSHED', label: '已推送' },
+  { key: 'PR_CREATED', label: 'PR 已创建' },
+]
+
 export function TaskEditPanel({ task, allTasks, onUpdate, onDelete, onClose }: TaskEditPanelProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -348,6 +367,95 @@ export function TaskEditPanel({ task, allTasks, onUpdate, onDelete, onClose }: T
             </p>
           )}
         </div>
+
+        {/* 执行状态 */}
+        {task.execution && (
+          <div className="pt-4 border-t border-gray-700">
+            <label className="block text-sm font-medium text-gray-300 mb-3">执行状态</label>
+
+            {/* 状态徽章 */}
+            <div className="flex items-center gap-3 mb-4">
+              {task.execution.status && executionStatusConfig[task.execution.status] && (
+                <span className={`px-3 py-1 text-sm rounded-full font-medium ${executionStatusConfig[task.execution.status].className}`}>
+                  {executionStatusConfig[task.execution.status].label}
+                </span>
+              )}
+
+              {/* 时间信息 */}
+              <div className="text-xs text-gray-500">
+                {task.execution.startedAt && (
+                  <span>开始: {new Date(task.execution.startedAt).toLocaleString('zh-CN')}</span>
+                )}
+                {task.execution.completedAt && (
+                  <span className="ml-3">完成: {new Date(task.execution.completedAt).toLocaleString('zh-CN')}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Git 操作进度 */}
+            {task.execution.gitStatus && (
+              <div className="mb-4">
+                <p className="text-xs text-gray-500 mb-2">Git 操作进度</p>
+                <div className="flex items-center gap-1">
+                  {gitStatusSteps.map((step, index) => {
+                    const currentIndex = gitStatusSteps.findIndex(s => s.key === task.execution?.gitStatus)
+                    const isCompleted = index <= currentIndex
+                    const isCurrent = index === currentIndex
+                    return (
+                      <div key={step.key} className="flex items-center">
+                        <div className={`
+                          w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium
+                          ${isCompleted ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-500'}
+                          ${isCurrent && task.execution?.status === 'RUNNING' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900' : ''}
+                        `}>
+                          {isCompleted ? '✓' : index + 1}
+                        </div>
+                        {index < gitStatusSteps.length - 1 && (
+                          <div className={`w-4 h-0.5 ${index < currentIndex ? 'bg-green-600' : 'bg-gray-700'}`} />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-1 px-1">
+                  {gitStatusSteps.map(step => (
+                    <span key={step.key} className="w-6 text-center" style={{ fontSize: '9px' }}>
+                      {step.label.slice(0, 2)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* PR 链接 */}
+            {task.execution.prUrl && (
+              <div className="mb-4">
+                <a
+                  href={task.execution.prUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+                  </svg>
+                  <span className="text-sm">Pull Request #{task.execution.prNumber || ''}</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+            )}
+
+            {/* 错误信息 */}
+            {task.execution.status === 'FAILED' && task.execution.error && (
+              <div className="p-3 bg-red-900/30 border border-red-800 rounded-lg">
+                <p className="text-xs text-red-400 font-medium mb-1">错误信息</p>
+                <p className="text-sm text-red-300 whitespace-pre-wrap">{task.execution.error}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Footer */}

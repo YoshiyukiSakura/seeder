@@ -77,38 +77,34 @@ const TEST_PLANS = {
 
 预估工时：16小时`,
 
-  apiIntegration: `## Linear API 集成方案
+  apiIntegration: `## Slack Webhook 集成方案
 
 ### 目标
-将 Seedbed 生成的任务自动同步到 Linear 项目管理工具。
+将 Seedbed 生成的任务通知推送到 Slack 频道。
 
-### OAuth 流程
-1. 用户点击"连接 Linear"按钮
-2. 跳转到 Linear OAuth 授权页面
-3. 用户授权后回调到 /api/auth/linear/callback
-4. 保存 access_token 到用户表
+### 配置流程
+1. 用户在 Settings 页面配置 Slack Webhook URL
+2. 系统验证 Webhook 可用性
+3. 保存 Webhook URL 到用户配置
 
-### 同步功能
-- 单向同步：Seedbed -> Linear
-- 批量创建 Issues
-- 支持设置 Team、Project、Priority
-- 创建汇总 Issue（META）关联所有子任务
+### 通知功能
+- Plan 创建时发送摘要通知
+- 任务完成时发送状态更新
+- 支持自定义通知模板
+- 支持 @mention 团队成员
 
-### 数据映射
-| Seedbed | Linear |
-|---------|--------|
-| P0 | Urgent |
-| P1 | High |
-| P2 | Medium |
-| P3 | Low |
-| labels | Labels |
-| acceptanceCriteria | Description |
+### 消息格式
+| 事件 | 消息内容 |
+|------|----------|
+| Plan Created | 计划名称 + 任务数量 |
+| Task Completed | 任务标题 + 完成者 |
+| All Done | 完成摘要 + 耗时统计 |
 
 ### 需要实现
-- OAuth 认证流程（3个API端点）
-- Linear SDK 集成
-- 发布对话框组件
-- 任务状态同步（可选）`
+- Webhook URL 配置 API
+- 通知发送服务
+- 消息模板组件
+- 通知历史记录（可选）`
 }
 
 function TestExtractContent() {
@@ -384,8 +380,6 @@ function TestExtractContent() {
             onTasksReorder={setTasks}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={handleTaskDelete}
-            planId={planId}
-            planName={selectedPlan}
             loading={false}
             extracting={isExtracting}
           />
@@ -396,7 +390,6 @@ function TestExtractContent() {
               onTasksChange={setTasks}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDelete}
-              planId={planId}
             />
           </div>
         )}

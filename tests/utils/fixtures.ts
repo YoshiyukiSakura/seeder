@@ -3,11 +3,20 @@
  * 用于创建测试场景的预设数据
  */
 
-import { TaskToPublish } from '@/lib/linear/publish'
-
 // ============ Task Fixtures ============
 
-export const SAMPLE_TASKS: TaskToPublish[] = [
+export interface SampleTask {
+  id: string
+  title: string
+  description: string
+  priority: number
+  labels: string[]
+  acceptanceCriteria: string[]
+  relatedFiles: string[]
+  estimateHours: number
+}
+
+export const SAMPLE_TASKS: SampleTask[] = [
   {
     id: 'task_1',
     title: '创建用户数据模型',
@@ -231,29 +240,6 @@ export const SSE_DONE_EVENT = {
   type: 'done' as const,
   data: {},
 }
-
-// ============ Linear Fixtures ============
-
-export const LINEAR_TEAMS = [
-  { id: 'team_eng', name: 'Engineering', key: 'ENG' },
-  { id: 'team_des', name: 'Design', key: 'DES' },
-  { id: 'team_pm', name: 'Product', key: 'PM' },
-]
-
-export const LINEAR_PROJECTS = [
-  { id: 'proj_1', name: 'Q1 Features', state: 'started' },
-  { id: 'proj_2', name: 'Tech Debt', state: 'planned' },
-  { id: 'proj_3', name: 'Bug Fixes', state: 'started' },
-]
-
-export const LINEAR_WORKFLOW_STATES = [
-  { id: 'state_1', name: 'Backlog', type: 'backlog', color: '#95a2b3' },
-  { id: 'state_2', name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
-  { id: 'state_3', name: 'In Progress', type: 'started', color: '#f2c94c' },
-  { id: 'state_4', name: 'In Review', type: 'started', color: '#5e6ad2' },
-  { id: 'state_5', name: 'Done', type: 'completed', color: '#5e6ad2' },
-  { id: 'state_6', name: 'Canceled', type: 'canceled', color: '#95a2b3' },
-]
 
 // ============ Auth Fixtures ============
 

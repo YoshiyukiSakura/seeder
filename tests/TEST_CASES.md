@@ -233,120 +233,7 @@ describe('Claude Session Management', () => {
 
 ---
 
-### 1.3 Linear 集成模块 (`src/lib/linear/`)
-
-#### TC-LINEAR-001: API Key 验证
-```typescript
-describe('validateApiKey', () => {
-  it('should return true for valid API key', async () => {
-    const validKey = 'lin_api_valid_key'
-    mockLinearClient(validKey, { viewer: { id: 'user1', name: 'Test User' } })
-
-    const result = await validateApiKey(validKey)
-    expect(result).toBe(true)
-  })
-
-  it('should return false for invalid API key', async () => {
-    const invalidKey = 'lin_api_invalid'
-    mockLinearClientError(invalidKey, new Error('Invalid API key'))
-
-    const result = await validateApiKey(invalidKey)
-    expect(result).toBe(false)
-  })
-
-  it('should return false for empty API key', async () => {
-    const result = await validateApiKey('')
-    expect(result).toBe(false)
-  })
-})
-```
-
-#### TC-LINEAR-002: Issue 描述格式化
-```typescript
-describe('formatIssueDescription', () => {
-  it('should format description with all fields', () => {
-    const task = {
-      description: 'Implement comment API',
-      acceptanceCriteria: ['API returns 200', 'Data is persisted'],
-      relatedFiles: ['src/api/comments.ts', 'prisma/schema.prisma']
-    }
-    const result = formatIssueDescription(task)
-
-    expect(result).toContain('Implement comment API')
-    expect(result).toContain('## 验收标准')
-    expect(result).toContain('- [ ] API returns 200')
-    expect(result).toContain('## 相关文件')
-    expect(result).toContain('`src/api/comments.ts`')
-    expect(result).toContain('由 Seedbed 自动创建')
-  })
-
-  it('should handle empty acceptance criteria', () => {
-    const task = { description: 'Simple task', acceptanceCriteria: [], relatedFiles: [] }
-    const result = formatIssueDescription(task)
-
-    expect(result).not.toContain('## 验收标准')
-    expect(result).not.toContain('## 相关文件')
-  })
-})
-```
-
-#### TC-LINEAR-003: 优先级映射
-```typescript
-describe('Priority Mapping', () => {
-  it('should map P0 to Urgent (1)', () => {
-    expect(mapPriority(0)).toBe(1)
-  })
-
-  it('should map P1 to High (2)', () => {
-    expect(mapPriority(1)).toBe(2)
-  })
-
-  it('should map P2 to Medium (3)', () => {
-    expect(mapPriority(2)).toBe(3)
-  })
-
-  it('should map P3 to Low (4)', () => {
-    expect(mapPriority(3)).toBe(4)
-  })
-
-  it('should default to Medium for invalid priority', () => {
-    expect(mapPriority(99)).toBe(3)
-    expect(mapPriority(-1)).toBe(3)
-  })
-})
-```
-
-#### TC-LINEAR-004: META Issue 生成
-```typescript
-describe('formatMetaIssueDescription', () => {
-  it('should generate correct statistics', () => {
-    const tasks = [
-      { priority: 0, estimateHours: 2 },
-      { priority: 0, estimateHours: 3 },
-      { priority: 1, estimateHours: 4 },
-      { priority: 2, estimateHours: 1 },
-    ]
-    const publishedIssues = [
-      { taskId: '1', identifier: 'ENG-1' },
-      { taskId: '2', identifier: 'ENG-2' },
-      { taskId: '3', identifier: 'ENG-3' },
-      { taskId: '4', identifier: 'ENG-4' },
-    ]
-
-    const result = formatMetaIssueDescription('Test Plan', tasks, publishedIssues)
-
-    expect(result).toContain('总任务数: 4')
-    expect(result).toContain('P0 (紧急): 2')
-    expect(result).toContain('P1 (高): 1')
-    expect(result).toContain('总预估工时: 10h')
-    expect(result).toContain('ENG-1')
-  })
-})
-```
-
----
-
-### 1.4 任务组件 (`src/components/tasks/`)
+### 1.3 任务组件 (`src/components/tasks/`)
 
 #### TC-TASK-001: TaskCard 组件
 ```typescript
@@ -382,13 +269,6 @@ describe('TaskCard', () => {
 
     fireEvent.click(screen.getByRole('article'))
     expect(handleClick).toHaveBeenCalledWith(task)
-  })
-
-  it('should show Linear icon when linearIssueId present', () => {
-    const task = createMockTask({ linearIssueId: 'issue123' })
-    render(<TaskCard task={task} />)
-
-    expect(screen.getByTestId('linear-linked-icon')).toBeInTheDocument()
   })
 })
 ```
@@ -787,119 +667,6 @@ describe('Tasks API', () => {
 })
 ```
 
-#### TC-API-004: Linear 集成 API
-```typescript
-describe('Linear Integration API', () => {
-  let authCookie: string
-  let testUser: User
-
-  beforeEach(async () => {
-    const setup = await setupAuthenticatedUser()
-    authCookie = setup.cookie
-    testUser = setup.user
-  })
-
-  describe('POST /api/linear/validate', () => {
-    it('should validate correct API key', async () => {
-      mockLinearSDK.viewer.mockResolvedValue({
-        id: 'user123',
-        name: 'Test User',
-        email: 'test@example.com'
-      })
-
-      const response = await request(app)
-        .post('/api/linear/validate')
-        .set('Cookie', authCookie)
-        .send({ apiKey: 'lin_api_valid' })
-        .expect(200)
-
-      expect(response.body.valid).toBe(true)
-      expect(response.body.user.name).toBe('Test User')
-    })
-
-    it('should reject invalid API key', async () => {
-      mockLinearSDK.viewer.mockRejectedValue(new Error('Invalid'))
-
-      const response = await request(app)
-        .post('/api/linear/validate')
-        .set('Cookie', authCookie)
-        .send({ apiKey: 'invalid_key' })
-        .expect(200)
-
-      expect(response.body.valid).toBe(false)
-    })
-  })
-
-  describe('GET /api/linear/teams', () => {
-    it('should return user teams when linearToken set', async () => {
-      await prisma.user.update({
-        where: { id: testUser.id },
-        data: { linearToken: 'encrypted_token' }
-      })
-
-      mockLinearSDK.teams.mockResolvedValue({
-        nodes: [
-          { id: 'team1', name: 'Engineering', key: 'ENG' },
-          { id: 'team2', name: 'Design', key: 'DES' }
-        ]
-      })
-
-      const response = await request(app)
-        .get('/api/linear/teams')
-        .set('Cookie', authCookie)
-        .expect(200)
-
-      expect(response.body.teams).toHaveLength(2)
-    })
-
-    it('should return 400 when linearToken not set', async () => {
-      await request(app)
-        .get('/api/linear/teams')
-        .set('Cookie', authCookie)
-        .expect(400)
-    })
-  })
-
-  describe('POST /api/plans/[planId]/publish', () => {
-    it('should publish tasks to Linear', async () => {
-      await prisma.user.update({
-        where: { id: testUser.id },
-        data: { linearToken: 'valid_token' }
-      })
-
-      const plan = await createTestPlanWithTasks(testUser.id)
-
-      mockLinearSDK.createIssue.mockResolvedValue({
-        success: true,
-        issue: Promise.resolve({
-          id: 'issue123',
-          url: 'https://linear.app/team/issue/ENG-1',
-          identifier: 'ENG-1'
-        })
-      })
-
-      const response = await request(app)
-        .post(`/api/plans/${plan.id}/publish`)
-        .set('Cookie', authCookie)
-        .send({
-          teamId: 'team1',
-          createMetaIssue: true
-        })
-        .expect(200)
-
-      expect(response.body.success).toBe(true)
-      expect(response.body.issues).toBeDefined()
-
-      // Verify linearIssueId saved
-      const task = await prisma.task.findFirst({
-        where: { planId: plan.id }
-      })
-      expect(task.linearIssueId).toBe('issue123')
-    })
-  })
-})
-```
-
 ---
 
 ### 2.2 Claude CLI 集成测试
@@ -1222,91 +989,7 @@ describe('Task Editing', () => {
 })
 ```
 
-### 3.3 Linear 集成 E2E
-
-#### TC-E2E-005: Linear API Key 配置
-```typescript
-describe('Linear Settings', () => {
-  beforeEach(async () => {
-    await loginAsTestUser(page)
-  })
-
-  it('should save and validate Linear API key', async () => {
-    await page.goto(`${APP_URL}/settings`)
-
-    // Enter API key
-    await page.fill('[data-testid="linear-api-key"]', TEST_LINEAR_API_KEY)
-    await page.click('[data-testid="validate-key-btn"]')
-
-    // Wait for validation
-    await expect(page.locator('[data-testid="validation-success"]')).toBeVisible()
-    await expect(page.locator('[data-testid="connected-user"]')).toContainText('@')
-
-    // Save
-    await page.click('[data-testid="save-settings-btn"]')
-    await expect(page.locator('[data-testid="save-success"]')).toBeVisible()
-
-    // Refresh and verify persisted
-    await page.reload()
-    await expect(page.locator('[data-testid="key-saved-indicator"]')).toBeVisible()
-  })
-
-  it('should show error for invalid API key', async () => {
-    await page.goto(`${APP_URL}/settings`)
-
-    await page.fill('[data-testid="linear-api-key"]', 'invalid_key')
-    await page.click('[data-testid="validate-key-btn"]')
-
-    await expect(page.locator('[data-testid="validation-error"]')).toBeVisible()
-  })
-})
-```
-
-#### TC-E2E-006: 发布到 Linear
-```typescript
-describe('Publish to Linear', () => {
-  beforeEach(async () => {
-    await loginAsTestUser(page)
-    await setupLinearApiKey(page)
-    await navigateToTestPlanWithTasks(page)
-  })
-
-  it('should publish tasks to Linear', async () => {
-    // Open publish dialog
-    await page.click('[data-testid="publish-btn"]')
-
-    // Select team
-    await page.click('[data-testid="team-select"]')
-    await page.click('[data-testid="team-option"]:first-child')
-
-    // Enable META issue
-    await page.check('[data-testid="create-meta-issue"]')
-
-    // Publish
-    await page.click('[data-testid="confirm-publish-btn"]')
-
-    // Wait for completion
-    await expect(page.locator('[data-testid="publish-success"]')).toBeVisible({ timeout: 30000 })
-
-    // Verify Linear links shown
-    await expect(page.locator('[data-testid="linear-issue-link"]')).toBeVisible()
-  }, 60000)
-
-  it('should show error when Linear API fails', async () => {
-    // Mock Linear API failure
-    await mockLinearAPIFailure()
-
-    await page.click('[data-testid="publish-btn"]')
-    await page.click('[data-testid="team-select"]')
-    await page.click('[data-testid="team-option"]:first-child')
-    await page.click('[data-testid="confirm-publish-btn"]')
-
-    await expect(page.locator('[data-testid="publish-error"]')).toBeVisible()
-  })
-})
-```
-
-### 3.4 导出功能 E2E
+### 3.3 导出功能 E2E
 
 #### TC-E2E-007: 导出任务
 ```typescript
@@ -1498,20 +1181,6 @@ describe('Authorization', () => {
 
     expect(response.status).toBe(404) // or 403
   })
-
-  it('should encrypt Linear API key in database', async () => {
-    await prisma.user.update({
-      where: { id: testUser.id },
-      data: { linearToken: 'lin_api_secret_key' }
-    })
-
-    const user = await prisma.user.findUnique({
-      where: { id: testUser.id }
-    })
-
-    // Should be encrypted, not plaintext
-    expect(user.linearToken).not.toBe('lin_api_secret_key')
-  })
 })
 ```
 
@@ -1655,8 +1324,7 @@ export default defineConfig({
 ### Phase 1: 单元测试 (1-2 天)
 1. 认证模块测试
 2. Claude CLI 模块测试
-3. Linear 集成模块测试
-4. React 组件测试
+3. React 组件测试
 
 ### Phase 2: 集成测试 (2-3 天)
 1. API 端点测试
@@ -1666,8 +1334,7 @@ export default defineConfig({
 ### Phase 3: E2E 测试 (2-3 天)
 1. 认证流程
 2. 主要业务流程
-3. Linear 发布流程
-4. 错误场景
+3. 错误场景
 
 ### Phase 4: 性能和安全测试 (1-2 天)
 1. 负载测试

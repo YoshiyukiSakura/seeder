@@ -189,9 +189,8 @@ describe('Token Security', () => {
     const [, payloadB64] = jwt.split('.')
     const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString())
 
-    // Should not contain password, linearToken, etc
+    // Should not contain password, api keys, etc
     expect(payload.password).toBeUndefined()
-    expect(payload.linearToken).toBeUndefined()
     expect(payload.apiKey).toBeUndefined()
   })
 

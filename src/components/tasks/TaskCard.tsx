@@ -20,6 +20,16 @@ const priorityColors: Record<number, string> = {
 
 const priorityLabels = ['P0', 'P1', 'P2', 'P3']
 
+// 执行状态配置
+const executionStatusConfig: Record<string, { label: string; className: string; icon?: string }> = {
+  PENDING: { label: '待执行', className: 'bg-gray-600 text-gray-200' },
+  WAITING_DEPS: { label: '等待依赖', className: 'bg-purple-600 text-purple-100' },
+  RUNNING: { label: '执行中', className: 'bg-blue-600 text-blue-100 animate-pulse' },
+  COMPLETED: { label: '已完成', className: 'bg-green-600 text-green-100' },
+  FAILED: { label: '失败', className: 'bg-red-600 text-red-100' },
+  SKIPPED: { label: '跳过', className: 'bg-yellow-600 text-yellow-100' },
+}
+
 export function TaskCard({ task, isSelected, onSelect, isDragging }: TaskCardProps) {
   const {
     attributes,
@@ -60,9 +70,17 @@ export function TaskCard({ task, isSelected, onSelect, isDragging }: TaskCardPro
 
       <div className="flex items-start justify-between mb-2">
         <span className="text-xs font-medium text-gray-400">{priorityLabels[task.priority]}</span>
-        {task.estimateHours && (
-          <span className="text-xs text-gray-500">{task.estimateHours}h</span>
-        )}
+        <div className="flex items-center gap-2">
+          {/* 执行状态徽章 */}
+          {task.execution?.status && executionStatusConfig[task.execution.status] && (
+            <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${executionStatusConfig[task.execution.status].className}`}>
+              {executionStatusConfig[task.execution.status].label}
+            </span>
+          )}
+          {task.estimateHours && (
+            <span className="text-xs text-gray-500">{task.estimateHours}h</span>
+          )}
+        </div>
       </div>
       <h4 className="font-medium text-white mb-2">{task.title}</h4>
       <p className="text-sm text-gray-400 mb-2 line-clamp-2">{task.description}</p>
@@ -98,6 +116,33 @@ export function TaskCard({ task, isSelected, onSelect, isDragging }: TaskCardPro
         <div className="mt-2 pt-2 border-t border-gray-700">
           <span className="text-xs text-purple-400">
             Blocked by {task.blockedBy.length} task{task.blockedBy.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
+
+      {/* PR 链接（已完成的任务） */}
+      {task.execution?.status === 'COMPLETED' && task.execution.prUrl && (
+        <div className="mt-2 pt-2 border-t border-gray-700">
+          <a
+            href={task.execution.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          >
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+            </svg>
+            PR #{task.execution.prNumber || 'View'}
+          </a>
+        </div>
+      )}
+
+      {/* 错误信息（失败的任务） */}
+      {task.execution?.status === 'FAILED' && task.execution.error && (
+        <div className="mt-2 pt-2 border-t border-gray-700">
+          <span className="text-xs text-red-400 line-clamp-2">
+            {task.execution.error}
           </span>
         </div>
       )}

@@ -28,5 +28,22 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
     },
+    {
+      name: 'seeder-dev',
+      script: 'npm',
+      args: 'run dev',
+      cwd: __dirname,
+      env: {
+        NODE_ENV: 'development',
+        PORT: 38966,
+      },
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+    },
   ],
 }

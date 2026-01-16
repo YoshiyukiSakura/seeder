@@ -13,6 +13,20 @@ interface RouteParams {
   params: Promise<{ planId: string }>
 }
 
+const CONTROL_CHAR_PATTERN = /[\u0000-\u001f]/g
+
+function sanitizeText(value: string | null | undefined): string | null | undefined {
+  if (typeof value !== 'string') return value
+  return value.replace(CONTROL_CHAR_PATTERN, '')
+}
+
+function sanitizeTextArray(
+  value: string[] | null | undefined
+): string[] | null | undefined {
+  if (!Array.isArray(value)) return value
+  return value.map((entry) => sanitizeText(entry) || '')
+}
+
 // GET /api/plans/[planId]
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const user = await getCurrentUser(request)
@@ -36,6 +50,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             localPath: true,
           },
         },
+        masterPlan: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+          },
+        },
         tasks: {
           orderBy: { sortOrder: 'asc' },
         },
@@ -49,7 +70,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ plan })
+    const sanitizedPlan = {
+      ...plan,
+      name: sanitizeText(plan.name) ?? plan.name,
+      description: sanitizeText(plan.description) ?? plan.description,
+      tasks: plan.tasks.map((task) => ({
+        ...task,
+        title: sanitizeText(task.title) ?? task.title,
+        description: sanitizeText(task.description) ?? task.description,
+        labels: sanitizeTextArray(task.labels) ?? task.labels,
+        acceptanceCriteria:
+          sanitizeTextArray(task.acceptanceCriteria) ?? task.acceptanceCriteria,
+        relatedFiles: sanitizeTextArray(task.relatedFiles) ?? task.relatedFiles,
+      })),
+      conversations: plan.conversations.map((conversation) => ({
+        ...conversation,
+        content: sanitizeText(conversation.content) ?? conversation.content,
+      })),
+    }
+
+    return NextResponse.json({ plan: sanitizedPlan })
   } catch (error) {
     console.error('Get plan error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -78,13 +118,46 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json()
 
+    // 检测是否是发布操作
+    const isPublishing = body.status === 'PUBLISHED' && existing.status !== 'PUBLISHED'
+
+    // 如果是发布操作，生成摘要
+    let summary: string | undefined
+    if (isPublishing) {
+      try {
+        const { generatePlanSummary } = await import('@/lib/summary-generator')
+        summary = await generatePlanSummary(planId)
+        console.log(`Generated summary for plan ${planId}: ${summary}`)
+      } catch (summaryError) {
+        // 生成失败不阻塞发布流程
+        console.error('Failed to generate summary:', summaryError)
+      }
+    }
+
+    // 构建更新数据
+    const updateData: Record<string, unknown> = {}
+
+    if (body.name !== undefined) updateData.name = body.name
+    if (body.description !== undefined) updateData.description = body.description
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.sessionId !== undefined) updateData.sessionId = body.sessionId
+    if (body.masterPlanId !== undefined) updateData.masterPlanId = body.masterPlanId
+    if (body.blockedByPlanIds !== undefined) updateData.blockedByPlanIds = body.blockedByPlanIds
+    if (body.sortOrder !== undefined) updateData.sortOrder = body.sortOrder
+    if (isPublishing) updateData.publishedAt = new Date()
+    if (summary) updateData.summary = summary
+
     const plan = await prisma.plan.update({
       where: { id: planId },
-      data: {
-        name: body.name,
-        description: body.description,
-        status: body.status,
-        sessionId: body.sessionId,
+      data: updateData,
+      include: {
+        masterPlan: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+          },
+        },
       },
     })
 

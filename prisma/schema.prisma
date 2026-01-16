@@ -15,7 +15,6 @@ model User {
   slackTeamId   String?
   email         String?
   avatarUrl     String?
-  linearToken   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   projects      Project[]
@@ -33,21 +32,39 @@ model LoginToken {
 }
 
 model Project {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   name        String
   description String?
   userId      String
   gitUrl      String?
-  gitBranch   String?  @default("main")
+  gitBranch   String?       @default("main")
   localPath   String?
   techStack   String[]
   conventions Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   plans       Plan[]
-  user        User     @relation(fields: [userId], references: [id])
+  masterPlans MasterPlan[]
+  user        User          @relation(fields: [userId], references: [id])
+  locks       ProjectLock[]
 
   @@index([userId])
+}
+
+model MasterPlan {
+  id          String     @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  status      PlanStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  project     Project    @relation(fields: [projectId], references: [id])
+  plans       Plan[]
+
+  @@index([projectId])
 }
 
 model Plan {
@@ -55,41 +72,50 @@ model Plan {
   projectId       String
   name            String
   description     String?
+  summary         String?        // LLM生成的计划摘要（发布时自动生成）
   status          PlanStatus     @default(DRAFT)
   sessionId       String?
   pendingQuestion Json?          // 存储待回答的问题数据 {toolUseId, questions}
-  linearProjectId String?
   publishedAt     DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+
+  // MasterPlan 关联字段
+  masterPlanId    String?                    // 所属主计划（可选，向后兼容）
+  blockedByPlanIds String[]     @default([]) // Plan间依赖关系
+  sortOrder       Int           @default(0)  // 在主计划中的排序
+
   conversations   Conversation[]
   project         Project        @relation(fields: [projectId], references: [id])
+  masterPlan      MasterPlan?    @relation(fields: [masterPlanId], references: [id], onDelete: SetNull)
   tasks           Task[]
+  executions      Execution[]
 
   @@index([projectId])
+  @@index([masterPlanId])
 }
 
 model Task {
-  id                 String   @id @default(cuid())
+  id                 String            @id @default(cuid())
   planId             String
   title              String
   description        String
-  priority           Int      @default(2)
+  priority           Int               @default(2)
   labels             String[]
   acceptanceCriteria String[]
   relatedFiles       String[]
   estimateHours      Float?
-  sortOrder          Int      @default(0)
+  sortOrder          Int               @default(0)
   dependsOnId        String?
-  linearIssueId      String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  blockedByIds       String[] @default([])
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  blockedByIds       String[]          @default([])
   positionX          Float?
   positionY          Float?
-  dependsOn          Task?    @relation("TaskDependency", fields: [dependsOnId], references: [id])
-  dependents         Task[]   @relation("TaskDependency")
-  plan               Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dependsOn          Task?             @relation("TaskDependency", fields: [dependsOnId], references: [id])
+  dependents         Task[]            @relation("TaskDependency")
+  plan               Plan              @relation(fields: [planId], references: [id], onDelete: Cascade)
+  issueExecutions    IssueExecution[]
 
   @@index([planId])
 }
@@ -111,4 +137,184 @@ enum PlanStatus {
   REVIEWING
   PUBLISHED
   ARCHIVED
+}
+
+// ==================== Farmer Enums ====================
+
+enum ExecutionStatus {
+  PENDING     // 等待执行
+  RUNNING     // 执行中
+  COMPLETED   // 成功完成
+  FAILED      // 执行失败
+  CANCELLED   // 已取消
+}
+
+enum IssueExecutionStatus {
+  PENDING       // 等待执行
+  WAITING_DEPS  // 等待依赖完成
+  RUNNING       // 执行中
+  COMPLETED     // 成功完成
+  FAILED        // 执行失败
+  SKIPPED       // 已跳过（依赖失败或取消）
+}
+
+// Git 操作的细粒度状态（用于原子性追踪）
+enum GitOperationStatus {
+  NOT_STARTED    // 未开始
+  BRANCH_CREATED // 分支已创建
+  COMMITTED      // 代码已提交
+  PUSHED         // 已推送到远程
+  PR_CREATED     // PR 已创建
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+enum LogSource {
+  SYSTEM    // 系统日志（Worker、调度器等）
+  CLAUDE    // Claude CLI 输出
+  GIT       // Git 操作
+  FRONTEND  // 前端日志
+  API       // API 请求日志
+}
+
+// PR 状态（用于追踪 GitHub PR 的审核状态）
+enum PRStatus {
+  OPEN          // PR 已打开，等待审核
+  APPROVED      // PR 已通过审核
+  CHANGES_REQ   // PR 需要修改
+  MERGED        // PR 已合并
+  CLOSED        // PR 已关闭（未合并）
+}
+
+// ==================== Farmer Models ====================
+
+model Execution {
+  id           String            @id @default(cuid())
+  planId       String
+  status       ExecutionStatus   @default(PENDING)
+
+  // 执行时的配置快照（防止执行中途 Project 配置变更导致不一致）
+  config       Json?             // ExecutionConfig 类型
+
+  // 时间信息
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  // 错误信息
+  error        String?
+
+  // Git 操作状态（Execution 级别）
+  gitStatus    GitOperationStatus @default(NOT_STARTED)
+  branchName   String?            // Execution 的统一分支名
+  prUrl        String?            // Execution 创建的 PR 链接
+  prNumber     Int?               // Execution 创建的 PR 编号
+
+  // PR 审核状态追踪
+  prStatus          PRStatus?     // GitHub PR 当前状态
+  prStatusSyncedAt  DateTime?     // PR 状态最后同步时间
+
+  // 饱和度分组
+  saturationGroupId String?       // 饱和度分组 ID（用于并行执行限制）
+
+  // 审计字段
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // 关联
+  plan         Plan              @relation(fields: [planId], references: [id])
+  issues       IssueExecution[]
+  logs         ExecutionLog[]
+
+  @@index([planId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([prStatus])
+  @@index([saturationGroupId])
+}
+
+model IssueExecution {
+  id              String                @id @default(cuid())
+  executionId     String
+  taskId          String
+
+  // 快照字段（执行时从 Task 复制，防止 Task 被修改后数据不一致）
+  taskTitle       String                // Task 标题快照
+  taskDescription String                // Task 描述快照
+
+  // 状态
+  status          IssueExecutionStatus  @default(PENDING)
+
+  // Claude 会话
+  claudeSessionId String?               // 用于恢复会话
+
+  // Task 交接信息
+  handoff         Json?
+
+  // 时间信息
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  // 错误处理
+  error           String?
+  retryCount      Int                   @default(0)
+  maxRetries      Int                   @default(2)  // 最大重试次数
+
+  // 审计字段
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  // 关联
+  execution       Execution             @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  task            Task                  @relation(fields: [taskId], references: [id])
+  logs            ExecutionLog[]
+
+  @@index([executionId])
+  @@index([taskId])
+  @@index([status])
+}
+
+model ExecutionLog {
+  id               String          @id @default(cuid())
+  executionId      String
+  issueExecutionId String?         // 可选，关联到具体 Issue
+
+  // 日志内容
+  level            LogLevel        @default(INFO)
+  source           LogSource       @default(SYSTEM)  // 日志来源
+  message          String
+  metadata         Json?           // LogMetadata 类型
+
+  // 时间
+  timestamp        DateTime        @default(now())
+
+  // 关联
+  execution        Execution       @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  issueExecution   IssueExecution? @relation(fields: [issueExecutionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@index([issueExecutionId])
+  @@index([timestamp])
+  @@index([level])
+  @@index([source])
+}
+
+model ProjectLock {
+  id          String    @id @default(cuid())
+  projectId   String    @unique    // 一个项目同时只能有一个锁
+  executionId String                // 持有锁的执行
+
+  // 锁定时间
+  lockedAt    DateTime  @default(now())
+  expiresAt   DateTime              // 自动过期时间（防止死锁）
+
+  // 关联
+  project     Project   @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([expiresAt])
 }
