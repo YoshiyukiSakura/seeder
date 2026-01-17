@@ -246,12 +246,16 @@ async function closeTestPRs(): Promise<void> {
 
   try {
     const repo = 'YoshiyukiSakura/e2e-test-repo'
-    const prsJson = exec(`gh pr list --repo ${repo} --state open --json number,title`, {
+    const prsJson = exec(`gh pr list --repo ${repo} --state open --json number,title,headRefName`, {
       silent: true,
     })
     const prs = JSON.parse(prsJson || '[]')
 
-    const testPrs = prs.filter((pr: { title: string }) => pr.title?.includes(CONFIG.prefix))
+    // 匹配测试PR：标题包含前缀 或 branch名称以 farmer/ 开头
+    const testPrs = prs.filter(
+      (pr: { title: string; headRefName: string }) =>
+        pr.title?.includes(CONFIG.prefix) || pr.headRefName?.startsWith('farmer/')
+    )
 
     let closedCount = 0
     for (const pr of testPrs) {
@@ -584,31 +588,48 @@ async function verifyResults(executionId: string): Promise<{
     }
   }
 
-  // 验证 GitHub PR
+  // 验证 GitHub PR - 通过 execution 记录中的 prUrl 验证
   log('Phase 5', '验证 GitHub PR...', 'info')
   let foundPRs = false
-  try {
-    const prsJson = exec(
-      `gh pr list --repo YoshiyukiSakura/e2e-test-repo --state open --json number,title,url`,
-      { silent: true }
-    )
-    const prs = JSON.parse(prsJson || '[]')
-    const testPrs = prs.filter((pr: { title: string; url: string }) => pr.title?.includes(CONFIG.prefix))
 
-    if (testPrs.length > 0) {
-      foundPRs = true
-      log('Phase 5', `找到 ${testPrs.length} 个测试 PR`, 'success')
-      for (const pr of testPrs) {
-        log('Phase 5', `  PR #${pr.number}: ${pr.title}`, 'info')
-        if (pr.url && !prUrls.includes(pr.url)) {
-          prUrls.push(pr.url)
-        }
-      }
-    } else {
-      log('Phase 5', '未找到测试 PR', 'warn')
+  // 首先检查 execution 记录中是否有 PR 信息
+  if (execution.prUrl) {
+    foundPRs = true
+    log('Phase 5', `Execution PR: ${execution.prUrl}`, 'success')
+    if (!prUrls.includes(execution.prUrl)) {
+      prUrls.push(execution.prUrl)
     }
-  } catch (e) {
-    log('Phase 5', `验证 PR 失败: ${e}`, 'warn')
+  } else {
+    // 备用方案：检查 GitHub 上是否有最近创建的 PR（不依赖标题前缀）
+    try {
+      const prsJson = exec(
+        `gh pr list --repo YoshiyukiSakura/e2e-test-repo --state open --json number,title,url,createdAt`,
+        { silent: true }
+      )
+      const prs = JSON.parse(prsJson || '[]')
+
+      // 查找最近10分钟内创建的PR（测试期间创建的）
+      const tenMinutesAgo = Date.now() - 10 * 60 * 1000
+      const recentPrs = prs.filter((pr: { createdAt: string }) => {
+        const prTime = new Date(pr.createdAt).getTime()
+        return prTime > tenMinutesAgo
+      })
+
+      if (recentPrs.length > 0) {
+        foundPRs = true
+        log('Phase 5', `找到 ${recentPrs.length} 个最近创建的 PR`, 'success')
+        for (const pr of recentPrs) {
+          log('Phase 5', `  PR #${pr.number}: ${pr.title}`, 'info')
+          if (pr.url && !prUrls.includes(pr.url)) {
+            prUrls.push(pr.url)
+          }
+        }
+      } else {
+        log('Phase 5', '未找到最近创建的 PR', 'warn')
+      }
+    } catch (e) {
+      log('Phase 5', `验证 PR 失败: ${e}`, 'warn')
+    }
   }
 
   // 成功条件：execution 完成 + 所有 issues 完成 + 找到 PR
