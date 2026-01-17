@@ -144,6 +144,7 @@ enum PlanStatus {
 enum ExecutionStatus {
   PENDING     // 等待执行
   RUNNING     // 执行中
+  PAUSED      // 暂停（速率限制）
   COMPLETED   // 成功完成
   FAILED      // 执行失败
   CANCELLED   // 已取消
@@ -218,6 +219,10 @@ model Execution {
   prStatus          PRStatus?     // GitHub PR 当前状态
   prStatusSyncedAt  DateTime?     // PR 状态最后同步时间
 
+  // 暂停相关字段（速率限制）
+  pausedAt          DateTime?     // 暂停时间
+  pauseReason       String?       // 暂停原因
+
   // 饱和度分组
   saturationGroupId String?       // 饱和度分组 ID（用于并行执行限制）
 
@@ -229,6 +234,7 @@ model Execution {
   plan         Plan              @relation(fields: [planId], references: [id])
   issues       IssueExecution[]
   logs         ExecutionLog[]
+  reviews      Review[]
 
   @@index([planId])
   @@index([status])
@@ -317,4 +323,85 @@ model ProjectLock {
 
   @@index([projectId])
   @@index([expiresAt])
+}
+
+// ==================== Reviewer Enums ====================
+
+enum ReviewStatus {
+  PENDING       // 等待评审
+  REVIEWING     // 评审中
+  COMPLETED     // 评审完成
+  FAILED        // 评审失败
+  APPROVED      // 已选定（择优）
+  DISMISSED     // 已放弃
+}
+
+enum CommentSeverity {
+  CRITICAL      // 严重问题
+  MAJOR         // 主要问题
+  MINOR         // 次要问题
+  SUGGESTION    // 建议
+  PRAISE        // 表扬
+}
+
+// ==================== Reviewer Models ====================
+
+model Review {
+  id                  String        @id @default(cuid())
+  executionId         String
+  prUrl               String
+  prNumber            Int
+  branchName          String
+  // 竞争分组直接使用 execution.saturationGroupId，无需冗余字段
+
+  // 评审状态和结果
+  status              ReviewStatus  @default(PENDING)
+  score               Int?          // 0-100
+  reasoning           String?       // 评分理由
+  summary             String?       // 代码变更总结
+
+  // AI 使用信息
+  aiModel             String?       // 使用的 AI 模型
+  aiTokensUsed        Int?          // 消耗的 token 数
+
+  // 时间信息
+  startedAt           DateTime?
+  completedAt         DateTime?
+
+  // 错误信息
+  error               String?
+
+  // 择优信息
+  approvedAt          DateTime?
+  approvedBy          String?       // 审批人的用户 ID
+  dismissedAt         DateTime?
+  dismissReason       String?
+
+  // 审计字段
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // 关联
+  execution           Execution     @relation(fields: [executionId], references: [id])
+  comments            ReviewComment[]
+
+  @@index([executionId])
+  @@index([status])
+  @@index([score])
+}
+
+model ReviewComment {
+  id              String          @id @default(cuid())
+  reviewId        String
+  filePath        String
+  lineNumber      Int?
+  content         String
+  severity        CommentSeverity
+  category        String?         // 例如: security, performance, style
+  suggestion      String?         // 改进建议
+  createdAt       DateTime        @default(now())
+
+  review          Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
 }
