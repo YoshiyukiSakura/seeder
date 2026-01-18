@@ -6,7 +6,8 @@ import { TaskList, Task } from '@/components/tasks'
 import { TaskCanvas } from '@/components/tasks/canvas'
 import { UserHeader } from '@/components/UserHeader'
 import { ProjectSelector, Project } from '@/components/ProjectSelector'
-import { ProgressPanel } from '@/components/progress'
+import { ProgressPanel, UploadProgress } from '@/components/progress'
+import { uploadFilesWithProgress, type UploadFileProgress } from '@/lib/upload'
 import type { ProgressState, ToolExecution } from '@/types/progress'
 import type { SSEToolData } from '@/lib/sse-types'
 import { getLastActivePlan, saveLastActivePlan, clearLastActivePlan } from '@/lib/conversation-storage'
@@ -32,6 +33,12 @@ interface SelectedAnswers {
 
 type AppState = 'idle' | 'processing' | 'waiting_input' | 'completed'
 type ViewMode = 'list' | 'canvas'
+
+interface AttachedImage {
+  id: string
+  file: File
+  previewUrl: string
+}
 
 function HomeContent() {
   const searchParams = useSearchParams()
@@ -60,7 +67,15 @@ function HomeContent() {
   const [isRestoring, setIsRestoring] = useState(false)  // 恢复对话中
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)  // 触发历史列表刷新
   const [viewMode, setViewMode] = useState<ViewMode>('list')  // 任务视图模式
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])  // 附加的图片
+  const [isUploading, setIsUploading] = useState(false)  // 图片上传中状态
+  const [uploadProgress, setUploadProgress] = useState<{
+    files: UploadFileProgress[]
+    totalProgress: number
+  } | null>(null)  // 上传进度状态
+  const [isDragging, setIsDragging] = useState(false)  // 拖放状态
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // 判断是否是数据库项目（可以保存对话）
   const isDatabaseProject = selectedProject && selectedProject.source === 'database'
@@ -72,6 +87,115 @@ function HomeContent() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // 添加图片到附件列表
+  const addImage = useCallback((file: File) => {
+    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const previewUrl = URL.createObjectURL(file)
+    setAttachedImages(prev => [...prev, { id, file, previewUrl }])
+  }, [])
+
+  // 从附件列表移除图片并清理预览 URL
+  const removeImage = useCallback((id: string) => {
+    setAttachedImages(prev => {
+      const imageToRemove = prev.find(img => img.id === id)
+      if (imageToRemove) {
+        URL.revokeObjectURL(imageToRemove.previewUrl)
+      }
+      return prev.filter(img => img.id !== id)
+    })
+  }, [])
+
+  // 组件卸载时清理所有预览 URL
+  useEffect(() => {
+    return () => {
+      attachedImages.forEach(img => {
+        URL.revokeObjectURL(img.previewUrl)
+      })
+    }
+  }, [])  // 仅在组件卸载时执行
+
+  // 处理文件选择
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    // 添加预览（立即显示）
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        addImage(file)
+      }
+    }
+
+    // 重置 file input，允许再次选择相同文件
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }, [addImage])
+
+  // 触发文件选择对话框
+  const handleUploadClick = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
+  // 处理粘贴事件（支持从剪贴板粘贴图片）
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    let hasImage = false
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          addImage(file)
+          hasImage = true
+        }
+      }
+    }
+
+    // 如果粘贴的是图片，阻止默认的文本粘贴行为
+    if (hasImage) {
+      e.preventDefault()
+    }
+  }, [addImage])
+
+  // 处理拖放事件
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer?.files
+    if (!files || files.length === 0) return
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        addImage(file)
+      }
+    }
+  }, [addImage])
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set isDragging to false if we're leaving the drop zone entirely
+    // Check if the related target is outside the drop zone
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }, [])
 
   // 恢复对话：优先 URL 参数，其次 localStorage
   useEffect(() => {
@@ -201,12 +325,13 @@ function HomeContent() {
     }
   }
 
-  const addMessage = (role: Message['role'], content: string) => {
+  const addMessage = (role: Message['role'], content: string, imagePaths?: string[]) => {
     setMessages(prev => [...prev, {
       id: Date.now().toString(),
       role,
       content,
-      timestamp: new Date()
+      timestamp: new Date(),
+      imagePaths
     }])
   }
 
@@ -382,25 +507,75 @@ function HomeContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || state === 'processing') return
+    const hasText = input.trim().length > 0
+    const hasImages = attachedImages.length > 0
+    if ((!hasText && !hasImages) || state === 'processing') return
 
     const userMessage = input.trim()
     setInput('')
-    addMessage('user', userMessage)
+
+    // 清空附加图片（保存引用用于上传）
+    const imagesToUpload = [...attachedImages]
+    setAttachedImages([])
+
     setState('processing')
     setPendingQuestion(null)
 
     try {
+      // 上传图片获取路径（带进度显示）
+      let imagePaths: string[] = []
+      if (imagesToUpload.length > 0) {
+        setIsUploading(true)
+        setUploadProgress({
+          files: imagesToUpload.map((img, index) => ({
+            id: `file-${index}-${Date.now()}`,
+            name: img.file.name,
+            progress: 0,
+            status: 'pending' as const
+          })),
+          totalProgress: 0
+        })
+
+        try {
+          const result = await uploadFilesWithProgress(
+            imagesToUpload.map(img => img.file),
+            (progress) => setUploadProgress(progress)
+          )
+
+          if (result.paths && result.paths.length > 0) {
+            imagePaths = result.paths
+          }
+          if (result.error) {
+            console.error('Image upload failed:', result.error)
+          }
+          if (result.warnings) {
+            result.warnings.forEach(w => console.warn('Upload warning:', w))
+          }
+        } catch (uploadError) {
+          console.error('Image upload error:', uploadError)
+        } finally {
+          setIsUploading(false)
+          // 延迟清除进度显示，让用户看到完成状态
+          setTimeout(() => setUploadProgress(null), 1000)
+          // 清理预览 URL
+          imagesToUpload.forEach(img => URL.revokeObjectURL(img.previewUrl))
+        }
+      }
+
+      // 显示用户消息（含图片路径）
+      addMessage('user', userMessage || '', imagePaths.length > 0 ? imagePaths : undefined)
+
       // 如果有 sessionId，继续现有对话；否则创建新对话
       if (sessionId) {
         const response = await apiFetch('/api/claude/continue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            answer: userMessage,
+            answer: userMessage || '[Images attached]',
             sessionId,
             planId,
-            projectPath: selectedProject?.path
+            projectPath: selectedProject?.path,
+            imagePaths: imagePaths.length > 0 ? imagePaths : undefined
           })
         })
         await processSSE(response, true)
@@ -413,10 +588,11 @@ function HomeContent() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prompt: userMessage,
+            prompt: userMessage || '[Images attached]',
             projectPath: selectedProject?.path,
             // 只有数据库项目才传递 projectId，用于创建 Plan 和保存对话
-            projectId: isDatabaseProject ? selectedProject.id : undefined
+            projectId: isDatabaseProject ? selectedProject.id : undefined,
+            imagePaths: imagePaths.length > 0 ? imagePaths : undefined
           })
         })
         await processSSE(response, true)
@@ -721,7 +897,25 @@ function HomeContent() {
                     : 'bg-gray-700 text-gray-100'
                 }`}
               >
-                <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
+                {msg.imagePaths && msg.imagePaths.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {msg.imagePaths.map((path, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-black/20 rounded text-xs"
+                        title={path}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {path.split('/').pop()}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {msg.content && (
+                  <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
+                )}
               </div>
             </div>
           ))}
@@ -845,18 +1039,89 @@ function HomeContent() {
 
         {/* Input */}
         <form onSubmit={handleSubmit} className="p-4 border-t border-gray-700">
-          <div className="flex gap-2">
+          {/* 图片预览区域 */}
+          {attachedImages.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {attachedImages.map((img) => (
+                <div key={img.id} className="relative group">
+                  <img
+                    src={img.previewUrl}
+                    alt="Preview"
+                    className="h-16 w-16 object-cover rounded-lg border border-gray-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(img.id)}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove image"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 上传进度显示 */}
+          {uploadProgress && (
+            <UploadProgress
+              files={uploadProgress.files}
+              totalProgress={uploadProgress.totalProgress}
+            />
+          )}
+
+          {/* 输入区域（拖放目标） */}
+          <div
+            className={`flex gap-2 p-2 -m-2 rounded-lg transition-colors ${
+              isDragging
+                ? 'bg-blue-500/20 border-2 border-dashed border-blue-500'
+                : 'border-2 border-transparent'
+            }`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+          >
+            {/* 隐藏的文件输入 */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            {/* 上传按钮 */}
+            <button
+              type="button"
+              onClick={handleUploadClick}
+              disabled={state === 'processing' || state === 'waiting_input'}
+              className="px-3 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Upload images"
+            >
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+
+            {/* 文本输入框 */}
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={handlePaste}
               placeholder={state === 'waiting_input' ? 'Please answer the questions above...' : 'Enter your requirements...'}
               disabled={state === 'processing' || state === 'waiting_input'}
               className="flex-1 bg-gray-800 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
+
+            {/* 发送按钮 */}
             <button
               type="submit"
-              disabled={state === 'processing' || state === 'waiting_input' || !input.trim()}
+              disabled={state === 'processing' || state === 'waiting_input' || (!input.trim() && attachedImages.length === 0)}
               className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Send

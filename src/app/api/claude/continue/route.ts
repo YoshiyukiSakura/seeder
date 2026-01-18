@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { DbNull } from '@/generated/prisma/internal/prismaNamespace'
 
 export async function POST(request: NextRequest) {
-  let body: { answer?: string; projectPath?: string; sessionId?: string; planId?: string }
+  let body: { answer?: string; projectPath?: string; sessionId?: string; planId?: string; imagePaths?: string[] }
   try {
     body = await request.json()
   } catch {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const { answer, projectPath, sessionId, planId } = body
+  const { answer, projectPath, sessionId, planId, imagePaths } = body
 
   if (!answer) {
     const errorEvent = createSSEError(
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // 使用 --resume <sessionId> 恢复特定会话
-        for await (const event of runClaude({ prompt: answer, cwd, sessionId })) {
+        for await (const event of runClaude({ prompt: answer, cwd, sessionId, imagePaths })) {
           // 收集助手消息内容
           if (event.type === 'text' && event.data?.content) {
             assistantContent += event.data.content
