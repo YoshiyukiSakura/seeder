@@ -4,7 +4,7 @@ import { createSSEError, encodeSSEEvent } from '@/lib/sse-types'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
-  let body: { prompt?: string; projectPath?: string; projectId?: string }
+  let body: { prompt?: string; projectPath?: string; projectId?: string; imagePaths?: string[] }
   try {
     body = await request.json()
   } catch {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const { prompt, projectPath, projectId } = body
+  const { prompt, projectPath, projectId, imagePaths } = body
 
   if (!prompt) {
     const errorEvent = createSSEError(
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // 启动新会话（不传 sessionId）
-        for await (const event of runClaude({ prompt, cwd })) {
+        for await (const event of runClaude({ prompt, cwd, imagePaths })) {
           // 从 init 事件中捕获 sessionId 并立即保存到数据库
           // 这样即使 AskUserQuestion 时用户刷新页面，sessionId 也不会丢失
           if (event.type === 'init' && event.data?.sessionId && !claudeSessionId) {

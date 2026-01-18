@@ -409,6 +409,60 @@ describe('MultiSelect Answer Formatting', () => {
   })
 })
 
+describe('Prompt with Images Building', () => {
+  // Helper function matching the logic in src/lib/claude.ts
+  function buildPromptWithImages(prompt: string, imagePaths?: string[]): string {
+    if (!imagePaths || imagePaths.length === 0) {
+      return prompt
+    }
+
+    const imageSection = imagePaths
+      .map(path => `[Image: ${path}]`)
+      .join('\n')
+
+    return `${prompt}\n\n附带的图片:\n${imageSection}`
+  }
+
+  it('should return original prompt when no imagePaths provided', () => {
+    const prompt = 'Create a new feature'
+    expect(buildPromptWithImages(prompt)).toBe(prompt)
+    expect(buildPromptWithImages(prompt, undefined)).toBe(prompt)
+    expect(buildPromptWithImages(prompt, [])).toBe(prompt)
+  })
+
+  it('should append single image path to prompt', () => {
+    const prompt = 'Analyze this design'
+    const imagePaths = ['/tmp/uploads/image1.png']
+    const result = buildPromptWithImages(prompt, imagePaths)
+
+    expect(result).toBe('Analyze this design\n\n附带的图片:\n[Image: /tmp/uploads/image1.png]')
+  })
+
+  it('should append multiple image paths to prompt', () => {
+    const prompt = 'Review these screenshots'
+    const imagePaths = [
+      '/tmp/uploads/screen1.png',
+      '/tmp/uploads/screen2.jpg',
+      '/tmp/uploads/mockup.webp'
+    ]
+    const result = buildPromptWithImages(prompt, imagePaths)
+
+    expect(result).toContain('Review these screenshots')
+    expect(result).toContain('附带的图片:')
+    expect(result).toContain('[Image: /tmp/uploads/screen1.png]')
+    expect(result).toContain('[Image: /tmp/uploads/screen2.jpg]')
+    expect(result).toContain('[Image: /tmp/uploads/mockup.webp]')
+  })
+
+  it('should preserve original prompt content', () => {
+    const prompt = 'Multi-line\nprompt\nwith special chars: @#$%'
+    const imagePaths = ['/tmp/uploads/test.png']
+    const result = buildPromptWithImages(prompt, imagePaths)
+
+    expect(result.startsWith(prompt)).toBe(true)
+  })
+})
+
 describe('JSON Line Parsing', () => {
   function parseJSONLine(line: string) {
     if (!line.trim()) return null

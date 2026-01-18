@@ -105,12 +105,30 @@ export interface RunClaudeOptions {
   prompt: string
   cwd: string
   sessionId?: string  // 用于 --resume 恢复特定会话
+  imagePaths?: string[]  // 图片路径数组，会被拼接到 prompt 中
+}
+
+/**
+ * 构建包含图片路径的完整 prompt
+ */
+function buildPromptWithImages(prompt: string, imagePaths?: string[]): string {
+  if (!imagePaths || imagePaths.length === 0) {
+    return prompt
+  }
+
+  // 将图片路径拼接到 prompt 末尾
+  const imageSection = imagePaths
+    .map(path => `[Image: ${path}]`)
+    .join('\n')
+
+  return `${prompt}\n\n附带的图片:\n${imageSection}`
 }
 
 export function runClaude(
   options: RunClaudeOptions
 ): AsyncIterable<AnySSEEvent> {
-  const { prompt, cwd, sessionId } = options
+  const { prompt, cwd, sessionId, imagePaths } = options
+  const finalPrompt = buildPromptWithImages(prompt, imagePaths)
 
   const args = [
     '--permission-mode', 'plan',
@@ -127,7 +145,7 @@ export function runClaude(
     args.push('--resume', sessionId)
   }
 
-  args.push(prompt)
+  args.push(finalPrompt)
 
   const claudePath = getClaudePath()
   const claude = spawn(claudePath, args, {
