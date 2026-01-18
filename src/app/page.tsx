@@ -68,6 +68,7 @@ function HomeContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('list')  // 任务视图模式
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])  // 附加的图片
   const [isUploading, setIsUploading] = useState(false)  // 图片上传中状态
+  const [isDragging, setIsDragging] = useState(false)  // 拖放状态
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -153,6 +154,43 @@ function HomeContent() {
       e.preventDefault()
     }
   }, [addImage])
+
+  // 处理拖放事件
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer?.files
+    if (!files || files.length === 0) return
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        addImage(file)
+      }
+    }
+  }, [addImage])
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set isDragging to false if we're leaving the drop zone entirely
+    // Check if the related target is outside the drop zone
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }, [])
 
   // 恢复对话：优先 URL 参数，其次 localStorage
   useEffect(() => {
@@ -1010,8 +1048,18 @@ function HomeContent() {
             </div>
           )}
 
-          {/* 输入区域 */}
-          <div className="flex gap-2">
+          {/* 输入区域（拖放目标） */}
+          <div
+            className={`flex gap-2 p-2 -m-2 rounded-lg transition-colors ${
+              isDragging
+                ? 'bg-blue-500/20 border-2 border-dashed border-blue-500'
+                : 'border-2 border-transparent'
+            }`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+          >
             {/* 隐藏的文件输入 */}
             <input
               ref={fileInputRef}
