@@ -132,6 +132,28 @@ function HomeContent() {
     fileInputRef.current?.click()
   }, [])
 
+  // 处理粘贴事件（支持从剪贴板粘贴图片）
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    let hasImage = false
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          addImage(file)
+          hasImage = true
+        }
+      }
+    }
+
+    // 如果粘贴的是图片，阻止默认的文本粘贴行为
+    if (hasImage) {
+      e.preventDefault()
+    }
+  }, [addImage])
+
   // 恢复对话：优先 URL 参数，其次 localStorage
   useEffect(() => {
     const restoreConversation = async () => {
@@ -1001,6 +1023,7 @@ function HomeContent() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={handlePaste}
               placeholder={state === 'waiting_input' ? 'Please answer the questions above...' : 'Enter your requirements...'}
               disabled={state === 'processing' || state === 'waiting_input'}
               className="flex-1 bg-gray-800 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
