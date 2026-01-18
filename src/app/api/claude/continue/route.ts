@@ -104,8 +104,15 @@ export async function POST(request: NextRequest) {
           }
 
           // 在 result 事件中添加 planId
-          if (event.type === 'result' && planId) {
-            event.data.planId = planId
+          if (event.type === 'result') {
+            if (planId) {
+              event.data.planId = planId
+            }
+            // 将 result 内容添加到 assistantContent，包含 Plan Complete 标记
+            // 这样数据库保存的消息与前端显示一致，刷新后可以正确恢复 Extract Tasks 按钮
+            if (event.data?.content) {
+              assistantContent += '\n\n---\n**Plan Complete**\n' + event.data.content
+            }
           }
 
           const data = `data: ${JSON.stringify(event)}\n\n`
