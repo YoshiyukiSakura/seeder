@@ -54,6 +54,16 @@ export class NextResponse<T = unknown> {
     this._cookies = new Map()
   }
 
+  // Instance method to get JSON data
+  async json(): Promise<T> {
+    return this.body as T
+  }
+
+  // Instance method to get text
+  async text(): Promise<string> {
+    return typeof this.body === 'string' ? this.body : JSON.stringify(this.body)
+  }
+
   get cookies() {
     const self = this
     return {

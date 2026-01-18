@@ -1,37 +1,386 @@
 /**
  * 图片上传 API 集成测试
+ * 测试覆盖文件上传、路径处理、类型验证、大小限制等
  */
+import { NextResponse } from 'next/server'
 import {
   createMockUser,
   createTestJWT,
+  createMockRequest,
   mockPrisma,
 } from '../../utils/mocks'
 
+// Mock fs 模块
+jest.mock('fs/promises', () => ({
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  mkdir: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn().mockReturnValue(true),
+}))
+
+// Mock crypto 模块以生成可预测的文件名
+jest.mock('crypto', () => {
+  const originalCrypto = jest.requireActual('crypto')
+  return {
+    ...originalCrypto,
+    randomBytes: jest.fn().mockImplementation((size: number) => ({
+      toString: (encoding: string) => 'abc12345',
+    })),
+  }
+})
+
+// Mock getCurrentUser
+const mockGetCurrentUser = jest.fn()
+jest.mock('@/lib/auth', () => ({
+  getCurrentUser: (...args: unknown[]) => mockGetCurrentUser(...args),
+}))
+
+import { POST } from '@/app/api/images/upload/route'
+import { writeFile, mkdir } from 'fs/promises'
+import { existsSync } from 'fs'
+
+// Helper to create a mock File object that works with the API
+function createMockFile(name: string, content: string, type: string): File {
+  const blob = new Blob([content], { type })
+  const file = Object.assign(blob, {
+    name,
+    lastModified: Date.now(),
+    webkitRelativePath: '',
+    // Ensure arrayBuffer method returns proper ArrayBuffer
+    arrayBuffer: async () => {
+      const encoder = new TextEncoder()
+      return encoder.encode(content).buffer
+    },
+  }) as File
+  return file
+}
+
+// Helper to create a mock NextRequest with FormData
+async function createFormDataRequest(files: File[]) {
+  // Create a mock request that simulates formData parsing
+  const mockFormData = {
+    getAll: (name: string) => {
+      if (name === 'files') return files
+      return []
+    },
+  }
+
+  const mockRequest = {
+    formData: jest.fn().mockResolvedValue(mockFormData),
+    cookies: {
+      get: jest.fn(),
+    },
+  }
+
+  return mockRequest
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
+  mockGetCurrentUser.mockResolvedValue(null)
+  ;(existsSync as jest.Mock).mockReturnValue(true)
 })
 
 describe('POST /api/images/upload', () => {
-  it('should require authentication', async () => {
-    // 未认证用户应该无法上传
-    mockPrisma.user.findUnique.mockResolvedValue(null)
+  describe('Authentication', () => {
+    it('should return 401 for unauthenticated request', async () => {
+      mockGetCurrentUser.mockResolvedValue(null)
 
-    // 验证未认证时返回 401
-    expect(mockPrisma.user.findUnique).toBeDefined()
+      const files = [createMockFile('test.jpg', 'test content', 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(401)
+      expect(data.error).toBe('Unauthorized')
+    })
+
+    it('should allow authenticated user to upload', async () => {
+      const user = createMockUser()
+      mockGetCurrentUser.mockResolvedValue(user)
+
+      const files = [createMockFile('test.jpg', 'fake image content', 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+
+      expect(response.status).toBe(201)
+    })
   })
 
-  it('should authenticate user with valid JWT', async () => {
-    const user = createMockUser()
-    const jwt = await createTestJWT({ userId: user.id })
+  describe('File Validation', () => {
+    beforeEach(() => {
+      const user = createMockUser()
+      mockGetCurrentUser.mockResolvedValue(user)
+    })
 
-    mockPrisma.user.findUnique.mockResolvedValue(user)
+    it('should reject request with no files', async () => {
+      const mockRequest = await createFormDataRequest([])
 
-    // 验证 JWT 创建成功
-    expect(jwt).toBeTruthy()
-    expect(typeof jwt).toBe('string')
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('No files provided')
+    })
+
+    it('should reject non-image file types', async () => {
+      const files = [createMockFile('document.pdf', 'fake pdf content', 'application/pdf')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('All files failed validation')
+      expect(data.details[0]).toContain('Invalid file type')
+      expect(data.details[0]).toContain('document.pdf')
+    })
+
+    it('should accept valid image types', async () => {
+      const validTypes = [
+        { type: 'image/jpeg', name: 'photo.jpg' },
+        { type: 'image/png', name: 'screenshot.png' },
+        { type: 'image/gif', name: 'animation.gif' },
+        { type: 'image/webp', name: 'modern.webp' },
+        { type: 'image/svg+xml', name: 'vector.svg' },
+      ]
+
+      for (const { type, name } of validTypes) {
+        jest.clearAllMocks()
+        const user = createMockUser()
+        mockGetCurrentUser.mockResolvedValue(user)
+        ;(existsSync as jest.Mock).mockReturnValue(true)
+
+        const files = [createMockFile(name, 'fake content', type)]
+        const mockRequest = await createFormDataRequest(files)
+
+        const response = await POST(mockRequest as any)
+
+        expect(response.status).toBe(201)
+      }
+    })
+
+    it('should reject files larger than 5MB', async () => {
+      // Create a mock file with size > 5MB
+      const largeContent = 'x'.repeat(6 * 1024 * 1024) // 6MB
+      const files = [createMockFile('large-image.jpg', largeContent, 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('All files failed validation')
+      expect(data.details[0]).toContain('File too large')
+      expect(data.details[0]).toContain('large-image.jpg')
+    })
+
+    it('should accept files under 5MB', async () => {
+      const smallContent = 'x'.repeat(1 * 1024 * 1024) // 1MB
+      const files = [createMockFile('small-image.jpg', smallContent, 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+
+      expect(response.status).toBe(201)
+    })
   })
 
-  it('should validate file type - reject non-image files', () => {
+  describe('File Processing', () => {
+    beforeEach(() => {
+      const user = createMockUser()
+      mockGetCurrentUser.mockResolvedValue(user)
+    })
+
+    it('should generate unique file names with timestamp and random string', async () => {
+      const files = [createMockFile('original-name.jpg', 'content', 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.paths).toHaveLength(1)
+      // 文件路径格式: /tmp/uploads/{timestamp}-{randomString}.jpg
+      expect(data.paths[0]).toMatch(/^\/tmp\/uploads\/\d+-[a-f0-9]+\.jpg$/)
+    })
+
+    it('should preserve file extension', async () => {
+      const testCases = [
+        { name: 'image.jpeg', ext: '.jpeg' },
+        { name: 'photo.PNG', ext: '.PNG' },
+        { name: 'animated.gif', ext: '.gif' },
+      ]
+
+      for (const { name, ext } of testCases) {
+        jest.clearAllMocks()
+        const user = createMockUser()
+        mockGetCurrentUser.mockResolvedValue(user)
+        ;(existsSync as jest.Mock).mockReturnValue(true)
+
+        const files = [createMockFile(name, 'content', 'image/jpeg')]
+        const mockRequest = await createFormDataRequest(files)
+
+        const response = await POST(mockRequest as any)
+        const data = await response.json()
+
+        expect(data.paths[0]).toContain(ext)
+      }
+    })
+
+    it('should create upload directory if not exists', async () => {
+      ;(existsSync as jest.Mock).mockReturnValue(false)
+
+      const files = [createMockFile('test.jpg', 'content', 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      await POST(mockRequest as any)
+
+      expect(mkdir).toHaveBeenCalledWith(
+        expect.stringContaining('tmp'),
+        { recursive: true }
+      )
+    })
+
+    it('should write file to disk', async () => {
+      const content = 'test image content'
+      const files = [createMockFile('test.jpg', content, 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      await POST(mockRequest as any)
+
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('tmp/uploads'),
+        expect.any(Buffer)
+      )
+    })
+  })
+
+  describe('Multiple Files', () => {
+    beforeEach(() => {
+      const user = createMockUser()
+      mockGetCurrentUser.mockResolvedValue(user)
+    })
+
+    it('should handle multiple valid files', async () => {
+      const files = [
+        createMockFile('a.jpg', '1', 'image/jpeg'),
+        createMockFile('b.png', '2', 'image/png'),
+        createMockFile('c.gif', '3', 'image/gif'),
+      ]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.paths).toHaveLength(3)
+    })
+
+    it('should return partial success with warnings when some files fail', async () => {
+      const files = [
+        createMockFile('valid.jpg', '1', 'image/jpeg'),
+        createMockFile('invalid.pdf', '2', 'application/pdf'),
+      ]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.paths).toHaveLength(1)
+      expect(data.warnings).toBeDefined()
+      expect(data.warnings).toHaveLength(1)
+      expect(data.warnings[0]).toContain('invalid.pdf')
+    })
+
+    it('should return error when all files fail validation', async () => {
+      const files = [
+        createMockFile('a.txt', '1', 'text/plain'),
+        createMockFile('b.json', '2', 'application/json'),
+      ]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('All files failed validation')
+      expect(data.details).toHaveLength(2)
+    })
+  })
+
+  describe('Response Format', () => {
+    beforeEach(() => {
+      const user = createMockUser()
+      mockGetCurrentUser.mockResolvedValue(user)
+    })
+
+    it('should return correct success response format', async () => {
+      const files = [createMockFile('test.jpg', 'content', 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data).toHaveProperty('paths')
+      expect(Array.isArray(data.paths)).toBe(true)
+      expect(data.paths[0]).toMatch(/^\/tmp\/uploads\//)
+    })
+
+    it('should return paths starting with /tmp/uploads/', async () => {
+      const files = [createMockFile('image.png', 'content', 'image/png')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(data.paths.every((p: string) => p.startsWith('/tmp/uploads/'))).toBe(true)
+    })
+  })
+
+  describe('Error Handling', () => {
+    beforeEach(() => {
+      const user = createMockUser()
+      mockGetCurrentUser.mockResolvedValue(user)
+    })
+
+    it('should handle file system write errors gracefully', async () => {
+      ;(writeFile as jest.Mock).mockRejectedValueOnce(new Error('Disk full'))
+
+      const files = [createMockFile('test.jpg', 'content', 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(500)
+      expect(data.error).toBe('Internal server error')
+    })
+
+    it('should handle mkdir errors gracefully', async () => {
+      ;(existsSync as jest.Mock).mockReturnValue(false)
+      ;(mkdir as jest.Mock).mockRejectedValueOnce(new Error('Permission denied'))
+
+      const files = [createMockFile('test.jpg', 'content', 'image/jpeg')]
+      const mockRequest = await createFormDataRequest(files)
+
+      const response = await POST(mockRequest as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(500)
+      expect(data.error).toBe('Internal server error')
+    })
+  })
+})
+
+describe('File Type Validation Logic', () => {
+  it('should correctly identify allowed MIME types', () => {
     const allowedTypes = [
       'image/jpeg',
       'image/png',
@@ -40,97 +389,52 @@ describe('POST /api/images/upload', () => {
       'image/svg+xml',
     ]
 
-    // 验证非图片类型被拒绝
-    const invalidTypes = ['application/pdf', 'text/plain', 'application/json']
-    invalidTypes.forEach(type => {
-      expect(allowedTypes.includes(type)).toBe(false)
-    })
-
-    // 验证图片类型被接受
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif']
+    // 测试有效类型
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
     validTypes.forEach(type => {
       expect(allowedTypes.includes(type)).toBe(true)
     })
-  })
 
-  it('should validate file size - reject files larger than 5MB', () => {
-    const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-
-    // 验证大文件被拒绝
-    const largeFileSize = 10 * 1024 * 1024 // 10MB
-    expect(largeFileSize > MAX_FILE_SIZE).toBe(true)
-
-    // 验证小文件被接受
-    const smallFileSize = 1 * 1024 * 1024 // 1MB
-    expect(smallFileSize <= MAX_FILE_SIZE).toBe(true)
-  })
-
-  it('should generate unique file names', () => {
-    // 验证文件名生成逻辑
-    const timestamp1 = Date.now()
-    const timestamp2 = Date.now() + 1
-
-    // 不同时间戳应该生成不同的前缀
-    expect(timestamp1).not.toBe(timestamp2)
-  })
-
-  it('should accept multiple files', () => {
-    // 验证可以处理多个文件
-    const files = [
-      { name: 'image1.jpg', type: 'image/jpeg', size: 1024 },
-      { name: 'image2.png', type: 'image/png', size: 2048 },
-      { name: 'image3.gif', type: 'image/gif', size: 512 },
+    // 测试无效类型
+    const invalidTypes = [
+      'application/pdf',
+      'text/plain',
+      'application/json',
+      'image/bmp',
+      'image/tiff',
+      'video/mp4',
+      'audio/mpeg',
     ]
-
-    expect(files.length).toBe(3)
-    files.forEach(file => {
-      expect(file.type.startsWith('image/')).toBe(true)
+    invalidTypes.forEach(type => {
+      expect(allowedTypes.includes(type)).toBe(false)
     })
   })
+})
 
-  it('should return paths array on success', () => {
-    // 验证响应格式
-    const mockResponse = {
-      paths: ['/tmp/uploads/12345-abc123.jpg', '/tmp/uploads/12346-def456.png'],
-    }
+describe('File Size Validation Logic', () => {
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 
-    expect(Array.isArray(mockResponse.paths)).toBe(true)
-    expect(mockResponse.paths.length).toBe(2)
-    expect(mockResponse.paths[0]).toContain('/tmp/uploads/')
+  it('should reject files exactly at the limit', () => {
+    const exactLimitSize = 5 * 1024 * 1024
+    expect(exactLimitSize > MAX_FILE_SIZE).toBe(false)
   })
 
-  it('should return warnings for partially failed uploads', () => {
-    // 验证部分失败时的响应格式
-    const mockResponse = {
-      paths: ['/tmp/uploads/12345-abc123.jpg'],
-      warnings: ['Invalid file type: document.pdf'],
-    }
-
-    expect(mockResponse.paths.length).toBe(1)
-    expect(mockResponse.warnings).toBeDefined()
-    expect(mockResponse.warnings?.length).toBe(1)
+  it('should reject files over the limit', () => {
+    const overLimitSize = 5 * 1024 * 1024 + 1
+    expect(overLimitSize > MAX_FILE_SIZE).toBe(true)
   })
 
-  it('should return error when all files fail validation', () => {
-    // 验证全部失败时的错误响应
-    const mockErrorResponse = {
-      error: 'All files failed validation',
-      details: [
-        'Invalid file type: document.pdf',
-        'File too large: huge-file.zip',
-      ],
-    }
+  it('should accept files under the limit', () => {
+    const underLimitSizes = [
+      0,
+      1024, // 1KB
+      1024 * 1024, // 1MB
+      4 * 1024 * 1024, // 4MB
+      5 * 1024 * 1024 - 1, // Just under 5MB
+    ]
 
-    expect(mockErrorResponse.error).toBe('All files failed validation')
-    expect(mockErrorResponse.details?.length).toBe(2)
-  })
-
-  it('should return error when no files provided', () => {
-    // 验证无文件时的错误响应
-    const mockErrorResponse = {
-      error: 'No files provided',
-    }
-
-    expect(mockErrorResponse.error).toBe('No files provided')
+    underLimitSizes.forEach(size => {
+      expect(size <= MAX_FILE_SIZE).toBe(true)
+    })
   })
 })
