@@ -7,12 +7,30 @@ export class NextRequest {
   method: string
   headers: Headers
   private _cookies: Map<string, { value: string }>
+  private _body: any
+  private _formData: FormData | null
 
   constructor(url: string, init?: { method?: string; headers?: HeadersInit; body?: any }) {
     this.url = url
     this.method = init?.method || 'GET'
     this.headers = new Headers(init?.headers)
     this._cookies = new Map()
+    this._body = init?.body
+    this._formData = init?.body instanceof FormData ? init.body : null
+  }
+
+  async formData(): Promise<FormData> {
+    if (this._formData) {
+      return this._formData
+    }
+    throw new Error('No FormData available')
+  }
+
+  async json(): Promise<any> {
+    if (typeof this._body === 'string') {
+      return JSON.parse(this._body)
+    }
+    return this._body
   }
 
   get cookies() {
@@ -67,6 +85,10 @@ export class NextResponse<T = unknown> {
         self._cookies.delete(name)
       },
     }
+  }
+
+  async json(): Promise<T> {
+    return this.body as T
   }
 
   static json<T>(data: T, init?: { status?: number; headers?: HeadersInit }): NextResponse<T> {
