@@ -282,12 +282,13 @@ function HomeContent() {
     }
   }
 
-  const addMessage = (role: Message['role'], content: string) => {
+  const addMessage = (role: Message['role'], content: string, imagePaths?: string[]) => {
     setMessages(prev => [...prev, {
       id: Date.now().toString(),
       role,
       content,
-      timestamp: new Date()
+      timestamp: new Date(),
+      imagePaths
     }])
   }
 
@@ -474,11 +475,6 @@ function HomeContent() {
     const imagesToUpload = [...attachedImages]
     setAttachedImages([])
 
-    // 显示用户消息（含图片数量提示）
-    const messageText = hasImages
-      ? (hasText ? `${userMessage} [${imagesToUpload.length} image(s) attached]` : `[${imagesToUpload.length} image(s) attached]`)
-      : userMessage
-    addMessage('user', messageText)
     setState('processing')
     setPendingQuestion(null)
 
@@ -511,6 +507,9 @@ function HomeContent() {
           imagesToUpload.forEach(img => URL.revokeObjectURL(img.previewUrl))
         }
       }
+
+      // 显示用户消息（含图片路径）
+      addMessage('user', userMessage || '', imagePaths.length > 0 ? imagePaths : undefined)
 
       // 如果有 sessionId，继续现有对话；否则创建新对话
       if (sessionId) {
@@ -844,7 +843,25 @@ function HomeContent() {
                     : 'bg-gray-700 text-gray-100'
                 }`}
               >
-                <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
+                {msg.imagePaths && msg.imagePaths.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {msg.imagePaths.map((path, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-black/20 rounded text-xs"
+                        title={path}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {path.split('/').pop()}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {msg.content && (
+                  <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
+                )}
               </div>
             </div>
           ))}
