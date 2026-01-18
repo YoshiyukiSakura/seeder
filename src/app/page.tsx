@@ -6,7 +6,8 @@ import { TaskList, Task } from '@/components/tasks'
 import { TaskCanvas } from '@/components/tasks/canvas'
 import { UserHeader } from '@/components/UserHeader'
 import { ProjectSelector, Project } from '@/components/ProjectSelector'
-import { ProgressPanel } from '@/components/progress'
+import { ProgressPanel, UploadProgress } from '@/components/progress'
+import { uploadFilesWithProgress, type UploadFileProgress } from '@/lib/upload'
 import type { ProgressState, ToolExecution } from '@/types/progress'
 import type { SSEToolData } from '@/lib/sse-types'
 import { getLastActivePlan, saveLastActivePlan, clearLastActivePlan } from '@/lib/conversation-storage'
@@ -68,6 +69,10 @@ function HomeContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('list')  // 任务视图模式
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])  // 附加的图片
   const [isUploading, setIsUploading] = useState(false)  // 图片上传中状态
+  const [uploadProgress, setUploadProgress] = useState<{
+    files: UploadFileProgress[]
+    totalProgress: number
+  } | null>(null)  // 上传进度状态
   const [isDragging, setIsDragging] = useState(false)  // 拖放状态
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -517,30 +522,41 @@ function HomeContent() {
     setPendingQuestion(null)
 
     try {
-      // 上传图片获取路径
+      // 上传图片获取路径（带进度显示）
       let imagePaths: string[] = []
       if (imagesToUpload.length > 0) {
         setIsUploading(true)
-        const formData = new FormData()
-        imagesToUpload.forEach(img => {
-          formData.append('files', img.file)
+        setUploadProgress({
+          files: imagesToUpload.map((img, index) => ({
+            id: `file-${index}-${Date.now()}`,
+            name: img.file.name,
+            progress: 0,
+            status: 'pending' as const
+          })),
+          totalProgress: 0
         })
 
         try {
-          const uploadRes = await apiFetch('/api/images/upload', {
-            method: 'POST',
-            body: formData
-          })
-          const uploadData = await uploadRes.json()
-          if (uploadRes.ok && uploadData.paths) {
-            imagePaths = uploadData.paths
-          } else {
-            console.error('Image upload failed:', uploadData.error)
+          const result = await uploadFilesWithProgress(
+            imagesToUpload.map(img => img.file),
+            (progress) => setUploadProgress(progress)
+          )
+
+          if (result.paths && result.paths.length > 0) {
+            imagePaths = result.paths
+          }
+          if (result.error) {
+            console.error('Image upload failed:', result.error)
+          }
+          if (result.warnings) {
+            result.warnings.forEach(w => console.warn('Upload warning:', w))
           }
         } catch (uploadError) {
           console.error('Image upload error:', uploadError)
         } finally {
           setIsUploading(false)
+          // 延迟清除进度显示，让用户看到完成状态
+          setTimeout(() => setUploadProgress(null), 1000)
           // 清理预览 URL
           imagesToUpload.forEach(img => URL.revokeObjectURL(img.previewUrl))
         }
@@ -1046,6 +1062,14 @@ function HomeContent() {
                 </div>
               ))}
             </div>
+          )}
+
+          {/* 上传进度显示 */}
+          {uploadProgress && (
+            <UploadProgress
+              files={uploadProgress.files}
+              totalProgress={uploadProgress.totalProgress}
+            />
           )}
 
           {/* 输入区域（拖放目标） */}
