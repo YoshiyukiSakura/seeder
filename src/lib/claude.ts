@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 import { existsSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, isAbsolute } from 'path'
 import {
   type AnySSEEvent,
   createSSEError,
@@ -110,18 +110,38 @@ export interface RunClaudeOptions {
 
 /**
  * 构建包含图片路径的完整 prompt
+ * 明确指示 Claude 使用 Read 工具读取图片
  */
 function buildPromptWithImages(prompt: string, imagePaths?: string[]): string {
   if (!imagePaths || imagePaths.length === 0) {
     return prompt
   }
 
-  // 将图片路径拼接到 prompt 末尾
-  const imageSection = imagePaths
-    .map(path => `[Image: ${path}]`)
+  // 将相对路径转换为绝对路径
+  // 上传 API 返回的路径格式: /tmp/uploads/xxx.png (相对项目根目录，不是真正的系统绝对路径)
+  const projectRoot = process.cwd()
+  const absolutePaths = imagePaths.map(p => {
+    // 如果路径已经以项目根目录开头，直接返回
+    if (p.startsWith(projectRoot)) {
+      return p
+    }
+    // 否则，将路径拼接到项目根目录
+    // 处理以 / 开头的相对路径（如 /tmp/uploads/xxx.png）
+    const relativePath = p.startsWith('/') ? p.slice(1) : p
+    return join(projectRoot, relativePath)
+  })
+
+  // 明确指示 Claude 读取图片文件
+  const imageInstructions = absolutePaths
+    .map((path, idx) => `${idx + 1}. ${path}`)
     .join('\n')
 
-  return `${prompt}\n\n附带的图片:\n${imageSection}`
+  return `IMPORTANT: The user has uploaded image file(s). You MUST use the Read tool to view the image(s) before responding.
+
+Image file path(s):
+${imageInstructions}
+
+User's question: ${prompt}`
 }
 
 export function runClaude(
