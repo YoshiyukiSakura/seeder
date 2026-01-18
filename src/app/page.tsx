@@ -76,6 +76,7 @@ function HomeContent() {
   const [isDragging, setIsDragging] = useState(false)  // 拖放状态
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const currentPlanIdRef = useRef<string | null>(null)  // 用于跟踪当前正在处理的会话，避免重复恢复
 
   // 判断是否是数据库项目（可以保存对话）
   const isDatabaseProject = selectedProject && selectedProject.source === 'database'
@@ -207,6 +208,10 @@ function HomeContent() {
       const planIdToRestore = urlPlanId || getLastActivePlan(selectedProject.id)
       if (!planIdToRestore) return
 
+      // 修复：如果当前planId已经等于要恢复的planId，跳过恢复
+      // 这避免了因URL更新触发的重复恢复导致内容被覆盖
+      if (planIdToRestore === currentPlanIdRef.current) return
+
       setIsRestoring(true)
       try {
         const response = await apiFetch(`/api/plans/${planIdToRestore}`)
@@ -222,12 +227,24 @@ function HomeContent() {
 
           // 恢复状态
           setPlanId(plan.id)
+          currentPlanIdRef.current = plan.id  // 更新ref，防止重复恢复
           setSessionId(plan.sessionId)
           setPlanStatus(plan.status || 'DRAFT')
 
           // 恢复消息
           if (plan.conversations && plan.conversations.length > 0) {
-            setMessages(plan.conversations.map(convertConversationToMessage))
+            const restoredMessages = plan.conversations.map(convertConversationToMessage)
+            setMessages(restoredMessages)
+
+            // 修复：从恢复的消息中提取 resultContent，使 Extract Tasks 按钮可见
+            const lastAssistantMsg = [...restoredMessages].reverse()
+              .find((m: Message) => m.role === 'assistant' && m.content.includes('**Plan Complete**'))
+            if (lastAssistantMsg) {
+              const match = lastAssistantMsg.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
+              if (match?.[1]) {
+                setResultContent(match[1])
+              }
+            }
           }
 
           // 恢复任务
@@ -455,6 +472,7 @@ function HomeContent() {
               // 保存 planId 用于后续继续对话
               if (event.data.planId) {
                 setPlanId(event.data.planId)
+                currentPlanIdRef.current = event.data.planId  // 更新ref，防止URL变化触发重复恢复
                 // 刷新历史列表（新对话创建成功）
                 setHistoryRefreshTrigger(prev => prev + 1)
               }
@@ -731,6 +749,7 @@ function HomeContent() {
     setMessages([])
     setSessionId(null)
     setPlanId(null)
+    currentPlanIdRef.current = null  // 清空ref
     setTasks([])
     setPendingQuestion(null)
     setSelectedAnswers({})
@@ -776,14 +795,27 @@ function HomeContent() {
         const { plan } = await res.json()
 
         setPlanId(plan.id)
+        currentPlanIdRef.current = plan.id  // 更新ref，防止重复恢复
         setSessionId(plan.sessionId)
         setPlanStatus(plan.status || 'DRAFT')
 
         // 恢复消息
         if (plan.conversations && plan.conversations.length > 0) {
-          setMessages(plan.conversations.map(convertConversationToMessage))
+          const restoredMessages = plan.conversations.map(convertConversationToMessage)
+          setMessages(restoredMessages)
+
+          // 修复：从恢复的消息中提取 resultContent，使 Extract Tasks 按钮可见
+          const lastAssistantMsg = [...restoredMessages].reverse()
+            .find((m: Message) => m.role === 'assistant' && m.content.includes('**Plan Complete**'))
+          if (lastAssistantMsg) {
+            const match = lastAssistantMsg.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
+            if (match?.[1]) {
+              setResultContent(match[1])
+            }
+          }
         } else {
           setMessages([])
+          setResultContent('')  // 清空 resultContent
         }
 
         // 恢复任务
