@@ -33,6 +33,12 @@ interface SelectedAnswers {
 type AppState = 'idle' | 'processing' | 'waiting_input' | 'completed'
 type ViewMode = 'list' | 'canvas'
 
+interface AttachedImage {
+  id: string
+  file: File
+  previewUrl: string
+}
+
 function HomeContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -60,6 +66,7 @@ function HomeContent() {
   const [isRestoring, setIsRestoring] = useState(false)  // 恢复对话中
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)  // 触发历史列表刷新
   const [viewMode, setViewMode] = useState<ViewMode>('list')  // 任务视图模式
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])  // 附加的图片
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // 判断是否是数据库项目（可以保存对话）
@@ -72,6 +79,33 @@ function HomeContent() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // 添加图片到附件列表
+  const addImage = useCallback((file: File) => {
+    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const previewUrl = URL.createObjectURL(file)
+    setAttachedImages(prev => [...prev, { id, file, previewUrl }])
+  }, [])
+
+  // 从附件列表移除图片并清理预览 URL
+  const removeImage = useCallback((id: string) => {
+    setAttachedImages(prev => {
+      const imageToRemove = prev.find(img => img.id === id)
+      if (imageToRemove) {
+        URL.revokeObjectURL(imageToRemove.previewUrl)
+      }
+      return prev.filter(img => img.id !== id)
+    })
+  }, [])
+
+  // 组件卸载时清理所有预览 URL
+  useEffect(() => {
+    return () => {
+      attachedImages.forEach(img => {
+        URL.revokeObjectURL(img.previewUrl)
+      })
+    }
+  }, [])  // 仅在组件卸载时执行
 
   // 恢复对话：优先 URL 参数，其次 localStorage
   useEffect(() => {
