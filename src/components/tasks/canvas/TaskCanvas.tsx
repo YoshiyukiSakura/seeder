@@ -24,6 +24,7 @@ import { useTaskNodes } from './hooks/useTaskNodes'
 import { useTaskEdges } from './hooks/useTaskEdges'
 import { useAutoLayout } from './hooks/useAutoLayout'
 import { TaskEditPanel } from '../TaskEditPanel'
+import { ExportDialog } from '../../export'
 
 // 自定义节点类型 - 使用类型断言绕过严格的类型检查
 const nodeTypes = {
@@ -41,6 +42,8 @@ interface TaskCanvasProps {
   onTaskUpdate: TaskUpdateHandler
   onTaskDelete: TaskDeleteHandler
   planId?: string
+  planName?: string
+  planDescription?: string
 }
 
 export function TaskCanvas({
@@ -49,8 +52,11 @@ export function TaskCanvas({
   onTaskUpdate,
   onTaskDelete,
   planId,
+  planName,
+  planDescription,
 }: TaskCanvasProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [showExportDialog, setShowExportDialog] = useState(false)
   const { getLayoutedElements } = useAutoLayout()
 
   // 生成初始节点和边
@@ -258,6 +264,16 @@ export function TaskCanvas({
             </svg>
             Auto Layout
           </button>
+          <button
+            onClick={() => setShowExportDialog(true)}
+            className="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm text-white flex items-center gap-2 transition-colors"
+            title="Export Plan"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Export
+          </button>
         </div>
 
         {/* 任务统计 */}
@@ -276,6 +292,15 @@ export function TaskCanvas({
           onClose={() => setSelectedTaskId(null)}
         />
       )}
+
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        tasks={tasks}
+        planName={planName}
+        planDescription={planDescription}
+      />
     </div>
   )
 }

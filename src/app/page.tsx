@@ -63,6 +63,8 @@ function HomeContent() {
   const [sessionId, setSessionId] = useState<string | null>(null)  // Claude 会话 ID
   const [planId, setPlanId] = useState<string | null>(null)  // 当前对话关联的 Plan ID
   const [planStatus, setPlanStatus] = useState<string>('DRAFT')  // Plan 状态
+  const [planName, setPlanName] = useState<string>('')  // Plan 名称
+  const [planDescription, setPlanDescription] = useState<string>('')  // Plan 描述
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)  // 选中的项目
   const [isRestoring, setIsRestoring] = useState(false)  // 恢复对话中
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)  // 触发历史列表刷新
@@ -230,6 +232,8 @@ function HomeContent() {
           currentPlanIdRef.current = plan.id  // 更新ref，防止重复恢复
           setSessionId(plan.sessionId)
           setPlanStatus(plan.status || 'DRAFT')
+          setPlanName(plan.name || '')
+          setPlanDescription(plan.description || '')
 
           // 恢复消息
           if (plan.conversations && plan.conversations.length > 0) {
@@ -756,6 +760,8 @@ function HomeContent() {
     setProgressState({ sessionStartTime: null, tools: [], currentToolId: null })
     setState('idle')
     setPlanStatus('DRAFT')
+    setPlanName('')
+    setPlanDescription('')
     router.replace('/', { scroll: false })
   }
 
@@ -798,6 +804,8 @@ function HomeContent() {
         currentPlanIdRef.current = plan.id  // 更新ref，防止重复恢复
         setSessionId(plan.sessionId)
         setPlanStatus(plan.status || 'DRAFT')
+        setPlanName(plan.name || '')
+        setPlanDescription(plan.description || '')
 
         // 恢复消息
         if (plan.conversations && plan.conversations.length > 0) {
@@ -1235,6 +1243,8 @@ function HomeContent() {
             planId={planId}
             planStatus={planStatus}
             onPublish={handlePublish}
+            planName={planName}
+            planDescription={planDescription}
           />
         ) : (
           <div className="flex-1 w-full h-full min-h-0">
@@ -1243,6 +1253,8 @@ function HomeContent() {
               onTasksChange={setTasks}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDelete}
+              planName={planName}
+              planDescription={planDescription}
             />
           </div>
         )}

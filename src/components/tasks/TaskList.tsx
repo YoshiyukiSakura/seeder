@@ -19,6 +19,7 @@ import { Task, TaskUpdateHandler, TaskDeleteHandler } from './types'
 import { TaskCard } from './TaskCard'
 import { TaskEditPanel } from './TaskEditPanel'
 import { TaskListSkeleton } from '../ui/Skeleton'
+import { ExportDialog } from '../export'
 
 interface TaskListProps {
   tasks: Task[]
@@ -34,13 +35,16 @@ interface TaskListProps {
   onPublish?: () => void
   projectId?: string | null
   onSaveAsPlan?: (name: string) => Promise<void>
+  planName?: string
+  planDescription?: string
 }
 
 type PriorityFilter = 'all' | 0 | 1 | 2 | 3
 
-export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, loading = false, extracting = false, canExtract = false, onExtract, planId, planStatus, onPublish }: TaskListProps) {
+export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, loading = false, extracting = false, canExtract = false, onExtract, planId, planStatus, onPublish, planName, planDescription }: TaskListProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
+  const [showExportDialog, setShowExportDialog] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -119,6 +123,18 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, lo
               </svg>
               Published
             </div>
+          )}
+          {/* Export Button */}
+          {tasks.length > 0 && (
+            <button
+              onClick={() => setShowExportDialog(true)}
+              className="mt-3 w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Export Plan
+            </button>
           )}
         </header>
 
@@ -225,6 +241,14 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, lo
         />
       )}
 
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        tasks={tasks}
+        planName={planName}
+        planDescription={planDescription}
+      />
     </>
   )
 }
