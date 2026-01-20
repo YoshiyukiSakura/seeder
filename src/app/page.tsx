@@ -250,11 +250,9 @@ function HomeContent() {
             console.log('[Restore] hasMarker:', !!lastAssistantMsgWithMarker)
 
             if (lastAssistantMsgWithMarker) {
-              const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*([\s\S]*)$/)
-              if (match?.[1]) {
-                setResultContent(match[1])
-                console.log('[Restore] Set resultContent from marker')
-              }
+              // 使用整个 assistant 消息内容用于任务提取，而不仅仅是 Plan Complete 后面的摘要
+              setResultContent(lastAssistantMsgWithMarker.content)
+              console.log('[Restore] Set resultContent from marker, length:', lastAssistantMsgWithMarker.content.length)
             } else if (plan.sessionId && !plan.pendingQuestion?.questions?.length) {
               // 2. 如果没有标记，但有 sessionId 且没有待回答问题，使用最后一条足够长的 assistant 消息
               const lastLongAssistantMsg = [...restoredMessages].reverse()
@@ -835,10 +833,8 @@ function HomeContent() {
           const lastAssistantMsgWithMarker = [...restoredMessages].reverse()
             .find((m: Message) => m.role === 'assistant' && m.content.includes('**Plan Complete**'))
           if (lastAssistantMsgWithMarker) {
-            const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*([\s\S]*)$/)
-            if (match?.[1]) {
-              setResultContent(match[1])
-            }
+            // 使用整个 assistant 消息内容用于任务提取
+            setResultContent(lastAssistantMsgWithMarker.content)
           } else if (plan.sessionId) {
             // 2. 如果没有标记，但有 sessionId，使用最后一条足够长的 assistant 消息
             const lastLongAssistantMsg = [...restoredMessages].reverse()
