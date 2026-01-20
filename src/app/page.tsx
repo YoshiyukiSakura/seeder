@@ -250,7 +250,7 @@ function HomeContent() {
             console.log('[Restore] hasMarker:', !!lastAssistantMsgWithMarker)
 
             if (lastAssistantMsgWithMarker) {
-              const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
+              const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*([\s\S]*)$/)
               if (match?.[1]) {
                 setResultContent(match[1])
                 console.log('[Restore] Set resultContent from marker')
@@ -835,7 +835,7 @@ function HomeContent() {
           const lastAssistantMsgWithMarker = [...restoredMessages].reverse()
             .find((m: Message) => m.role === 'assistant' && m.content.includes('**Plan Complete**'))
           if (lastAssistantMsgWithMarker) {
-            const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
+            const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*([\s\S]*)$/)
             if (match?.[1]) {
               setResultContent(match[1])
             }
