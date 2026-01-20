@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDeepSeekClient } from '@/lib/deepseek'
-import { getGeminiClient } from '@/lib/gemini'
+import { getMiniMaxClient } from '@/lib/minimax'
 import { buildTaskExtractionPrompt } from '@/lib/prompts/task-extraction'
 import type { Task } from '@/components/tasks/types'
 
@@ -31,17 +30,11 @@ export async function POST(request: NextRequest) {
     console.log('Plan content length:', planContent.length)
     console.log('Plan content preview:', planContent.slice(0, 200))
 
-    // 优先使用 DeepSeek，失败时回退到 Gemini
+    // 使用 MiniMax 进行任务提取
     let response: string
-    try {
-      const deepseekClient = getDeepSeekClient()
-      console.log('Using DeepSeek for task extraction...')
-      response = await deepseekClient.generateContent(prompt)
-    } catch (deepseekError) {
-      console.warn('DeepSeek failed, falling back to Gemini:', deepseekError)
-      const geminiClient = getGeminiClient()
-      response = await geminiClient.generateContent(prompt)
-    }
+    const minimaxClient = getMiniMaxClient()
+    console.log('Using MiniMax for task extraction...')
+    response = await minimaxClient.generateContent(prompt)
 
     // 解析 JSON 响应
     console.log('AI response length:', response.length)
