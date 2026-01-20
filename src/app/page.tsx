@@ -241,12 +241,20 @@ function HomeContent() {
             setMessages(restoredMessages)
 
             // 修复：从恢复的消息中提取 resultContent，使 Extract Tasks 按钮可见
-            const lastAssistantMsg = [...restoredMessages].reverse()
+            // 1. 首先尝试查找带有 **Plan Complete** 标记的消息
+            const lastAssistantMsgWithMarker = [...restoredMessages].reverse()
               .find((m: Message) => m.role === 'assistant' && m.content.includes('**Plan Complete**'))
-            if (lastAssistantMsg) {
-              const match = lastAssistantMsg.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
+            if (lastAssistantMsgWithMarker) {
+              const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
               if (match?.[1]) {
                 setResultContent(match[1])
+              }
+            } else if (plan.sessionId && !plan.pendingQuestion?.questions?.length) {
+              // 2. 如果没有标记，但有 sessionId 且没有待回答问题，使用最后一条足够长的 assistant 消息
+              const lastLongAssistantMsg = [...restoredMessages].reverse()
+                .find((m: Message) => m.role === 'assistant' && m.content.length > 500)
+              if (lastLongAssistantMsg) {
+                setResultContent(lastLongAssistantMsg.content)
               }
             }
           }
@@ -813,13 +821,25 @@ function HomeContent() {
           setMessages(restoredMessages)
 
           // 修复：从恢复的消息中提取 resultContent，使 Extract Tasks 按钮可见
-          const lastAssistantMsg = [...restoredMessages].reverse()
+          // 1. 首先尝试查找带有 **Plan Complete** 标记的消息
+          const lastAssistantMsgWithMarker = [...restoredMessages].reverse()
             .find((m: Message) => m.role === 'assistant' && m.content.includes('**Plan Complete**'))
-          if (lastAssistantMsg) {
-            const match = lastAssistantMsg.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
+          if (lastAssistantMsgWithMarker) {
+            const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
             if (match?.[1]) {
               setResultContent(match[1])
             }
+          } else if (plan.sessionId) {
+            // 2. 如果没有标记，但有 sessionId，使用最后一条足够长的 assistant 消息
+            const lastLongAssistantMsg = [...restoredMessages].reverse()
+              .find((m: Message) => m.role === 'assistant' && m.content.length > 500)
+            if (lastLongAssistantMsg) {
+              setResultContent(lastLongAssistantMsg.content)
+            } else {
+              setResultContent('')
+            }
+          } else {
+            setResultContent('')
           }
         } else {
           setMessages([])
