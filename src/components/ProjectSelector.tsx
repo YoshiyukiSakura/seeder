@@ -18,6 +18,7 @@ interface ProjectSelectorProps {
   onSelect: (project: Project | null) => void
   selectedProject: Project | null
   className?: string
+  onProjectsLoaded?: (projects: Project[]) => void
 }
 
 interface DBProject {
@@ -36,7 +37,7 @@ interface LocalProject {
   hasGit: boolean
 }
 
-export function ProjectSelector({ onSelect, selectedProject, className = '' }: ProjectSelectorProps) {
+export function ProjectSelector({ onSelect, selectedProject, className = '', onProjectsLoaded }: ProjectSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -113,6 +114,7 @@ export function ProjectSelector({ onSelect, selectedProject, className = '' }: P
         }
 
         setProjects(allProjects)
+        onProjectsLoaded?.(allProjects)
       } catch (err) {
         console.error('Failed to load projects:', err)
         setError('Failed to load projects')

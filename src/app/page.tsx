@@ -10,7 +10,10 @@ import { ProgressPanel, UploadProgress } from '@/components/progress'
 import { uploadFilesWithProgress, type UploadFileProgress } from '@/lib/upload'
 import type { ProgressState, ToolExecution } from '@/types/progress'
 import type { SSEToolData } from '@/lib/sse-types'
-import { getLastActivePlan, saveLastActivePlan, clearLastActivePlan } from '@/lib/conversation-storage'
+import {
+  getLastActivePlan, saveLastActivePlan, clearLastActivePlan,
+  getSelectedProjectId, saveSelectedProjectId, clearSelectedProjectId
+} from '@/lib/conversation-storage'
 import { convertConversationToMessage, type Message } from '@/lib/conversation-utils'
 import { PlanHistoryPanel } from '@/components/PlanHistoryPanel'
 import { apiFetch } from '@/lib/basePath'
@@ -76,6 +79,7 @@ function HomeContent() {
     totalProgress: number
   } | null>(null)  // 上传进度状态
   const [isDragging, setIsDragging] = useState(false)  // 拖放状态
+  const [loadedProjects, setLoadedProjects] = useState<Project[]>([])  // 已加载的项目列表
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentPlanIdRef = useRef<string | null>(null)  // 用于跟踪当前正在处理的会话，避免重复恢复
@@ -197,6 +201,37 @@ function HomeContent() {
     // Check if the related target is outside the drop zone
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDragging(false)
+    }
+  }, [])
+
+  // 项目加载完成回调
+  const handleProjectsLoaded = useCallback((projects: Project[]) => {
+    setLoadedProjects(projects)
+  }, [])
+
+  // 从 localStorage 恢复选中的项目
+  useEffect(() => {
+    if (loadedProjects.length === 0) return
+    if (selectedProject) return  // 已有选中，不覆盖
+
+    const savedId = getSelectedProjectId()
+    if (!savedId) return
+
+    const project = loadedProjects.find(p => p.id === savedId)
+    if (project) {
+      setSelectedProject(project)
+    } else {
+      clearSelectedProjectId()  // 项目不存在，清除缓存
+    }
+  }, [loadedProjects, selectedProject])
+
+  // 处理项目选择（包含持久化逻辑）
+  const handleSelectProject = useCallback((project: Project | null) => {
+    setSelectedProject(project)
+    if (project) {
+      saveSelectedProjectId(project.id)
+    } else {
+      clearSelectedProjectId()
     }
   }, [])
 
@@ -937,7 +972,8 @@ function HomeContent() {
           {/* Project Selector */}
           <ProjectSelector
             selectedProject={selectedProject}
-            onSelect={setSelectedProject}
+            onSelect={handleSelectProject}
+            onProjectsLoaded={handleProjectsLoaded}
             className="max-w-md"
           />
         </header>

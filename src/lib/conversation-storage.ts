@@ -3,6 +3,7 @@
  */
 
 const STORAGE_KEY = 'seedbed_active_plans'
+const SELECTED_PROJECT_KEY = 'seedbed_selected_project'
 
 interface ActivePlansStore {
   [projectId: string]: string  // projectId -> planId
@@ -53,5 +54,39 @@ export function clearLastActivePlan(projectId: string): void {
     }
   } catch (e) {
     console.error('Failed to clear from localStorage:', e)
+  }
+}
+
+/**
+ * Get the selected project ID from localStorage
+ */
+export function getSelectedProjectId(): string | null {
+  try {
+    return localStorage.getItem(SELECTED_PROJECT_KEY)
+  } catch (e) {
+    console.error('Failed to read selected project from localStorage:', e)
+    return null
+  }
+}
+
+/**
+ * Save the selected project ID to localStorage
+ */
+export function saveSelectedProjectId(projectId: string): void {
+  try {
+    localStorage.setItem(SELECTED_PROJECT_KEY, projectId)
+  } catch (e) {
+    console.error('Failed to save selected project to localStorage:', e)
+  }
+}
+
+/**
+ * Clear the selected project ID from localStorage
+ */
+export function clearSelectedProjectId(): void {
+  try {
+    localStorage.removeItem(SELECTED_PROJECT_KEY)
+  } catch (e) {
+    console.error('Failed to clear selected project from localStorage:', e)
   }
 }
