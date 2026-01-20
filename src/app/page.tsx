@@ -244,18 +244,28 @@ function HomeContent() {
             // 1. 首先尝试查找带有 **Plan Complete** 标记的消息
             const lastAssistantMsgWithMarker = [...restoredMessages].reverse()
               .find((m: Message) => m.role === 'assistant' && m.content.includes('**Plan Complete**'))
+
+            console.log('[Restore] sessionId:', plan.sessionId)
+            console.log('[Restore] pendingQuestion:', plan.pendingQuestion)
+            console.log('[Restore] hasMarker:', !!lastAssistantMsgWithMarker)
+
             if (lastAssistantMsgWithMarker) {
               const match = lastAssistantMsgWithMarker.content.match(/---\s*\*\*Plan Complete\*\*\s*\n([\s\S]*)$/)
               if (match?.[1]) {
                 setResultContent(match[1])
+                console.log('[Restore] Set resultContent from marker')
               }
             } else if (plan.sessionId && !plan.pendingQuestion?.questions?.length) {
               // 2. 如果没有标记，但有 sessionId 且没有待回答问题，使用最后一条足够长的 assistant 消息
               const lastLongAssistantMsg = [...restoredMessages].reverse()
                 .find((m: Message) => m.role === 'assistant' && m.content.length > 500)
+              console.log('[Restore] lastLongAssistantMsg length:', lastLongAssistantMsg?.content.length)
               if (lastLongAssistantMsg) {
                 setResultContent(lastLongAssistantMsg.content)
+                console.log('[Restore] Set resultContent from long message')
               }
+            } else {
+              console.log('[Restore] Conditions not met for resultContent')
             }
           }
 
