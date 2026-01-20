@@ -42,8 +42,11 @@ export async function POST(request: NextRequest) {
 
     let extractedTasks: ExtractedTask[]
     try {
-      // 尝试提取 JSON 数组（可能被包裹在 markdown code block 中）
+      // 尝试提取 JSON 数组
       let jsonStr = response.trim()
+
+      // 移除 MiniMax 模型的 <think>...</think> 思考标签
+      jsonStr = jsonStr.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 
       // 移除可能的 markdown code block
       if (jsonStr.startsWith('```json')) {
@@ -56,9 +59,10 @@ export async function POST(request: NextRequest) {
       }
       jsonStr = jsonStr.trim()
 
+      console.log('JSON string to parse:', jsonStr.slice(0, 500))
       extractedTasks = JSON.parse(jsonStr)
     } catch (parseError) {
-      console.error('Failed to parse Gemini response:', response)
+      console.error('Failed to parse AI response:', response)
       return NextResponse.json(
         { error: 'Failed to parse task extraction response', raw: response },
         { status: 500 }
