@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { cloneRepository, validateGitUrl, generateLocalPath } from '@/lib/git-utils'
 
 // GET /api/projects - 获取项目列表
 export async function GET(request: NextRequest) {
@@ -85,6 +86,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Determine localPath - either from git clone or provided directly
+    let localPath = body.localPath
+
+    // If gitUrl is provided, clone the repository
+    if (body.gitUrl) {
+      // Validate git URL format
+      if (!validateGitUrl(body.gitUrl)) {
+        return NextResponse.json(
+          { error: 'Invalid Git URL format. Use HTTPS (https://...) or SSH (git@...) format.' },
+          { status: 400 }
+        )
+      }
+
+      // Generate local path for the clone
+      try {
+        localPath = generateLocalPath(user.id, body.gitUrl)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        return NextResponse.json(
+          { error: errorMessage },
+          { status: 500 }
+        )
+      }
+
+      // Clone the repository
+      const cloneResult = await cloneRepository(
+        body.gitUrl,
+        localPath,
+        body.gitBranch
+      )
+
+      if (!cloneResult.success) {
+        return NextResponse.json(
+          { error: cloneResult.error },
+          { status: 400 }
+        )
+      }
+
+      localPath = cloneResult.path
+    }
+
     const project = await prisma.project.create({
       data: {
         ...(projectId ? { id: projectId } : {}),
@@ -93,7 +135,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         gitUrl: body.gitUrl,
         gitBranch: body.gitBranch || 'main',
-        localPath: body.localPath,
+        localPath: localPath,
         techStack: body.techStack || [],
       },
     })

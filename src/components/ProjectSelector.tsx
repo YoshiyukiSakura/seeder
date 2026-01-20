@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '@/lib/basePath'
+import { ProjectDialog, type ProjectFormData } from '@/components/project'
 
 // 统一的项目类型（合并数据库项目和本地项目）
 export interface Project {
@@ -44,6 +45,11 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Dialog states
+  const [showDialog, setShowDialog] = useState(false)
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
+  const [dialogInitialData, setDialogInitialData] = useState<Partial<ProjectFormData> | undefined>(undefined)
 
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -148,6 +154,95 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
     onSelect(null)
   }
 
+  // Open dialog for creating a new project
+  const handleOpenCreateDialog = () => {
+    setDialogMode('create')
+    setDialogInitialData(undefined)
+    setShowDialog(true)
+    setIsOpen(false)
+  }
+
+  // Open dialog for saving a local project (converts local to saved)
+  const handleSaveLocalProject = (project: Project, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDialogMode('create')
+    setDialogInitialData({
+      name: project.name,
+      description: project.description,
+      techStack: project.techStack.join(', '),
+      localPath: project.path,
+      gitUrl: '',
+      gitBranch: 'main',
+    })
+    setShowDialog(true)
+    setIsOpen(false)
+  }
+
+  // Handle successful dialog submission
+  const handleDialogSuccess = async (savedProject: ProjectFormData & { id: string }) => {
+    // Reload projects list
+    setLoading(true)
+    try {
+      const [dbResponse, localResponse] = await Promise.all([
+        apiFetch('/api/projects'),
+        apiFetch('/api/projects/local')
+      ])
+
+      const allProjects: Project[] = []
+
+      if (dbResponse.ok) {
+        const dbData = await dbResponse.json()
+        if (dbData.projects) {
+          dbData.projects.forEach((p: DBProject) => {
+            allProjects.push({
+              id: p.id,
+              name: p.name,
+              path: p.localPath,
+              description: p.description,
+              techStack: p.techStack || [],
+              source: 'database'
+            })
+          })
+        }
+      }
+
+      if (localResponse.ok) {
+        const localData = await localResponse.json()
+        if (localData.projects) {
+          localData.projects.forEach((p: LocalProject) => {
+            const exists = allProjects.some(
+              existing => existing.path === p.path
+            )
+            if (!exists) {
+              allProjects.push({
+                id: `local-${p.path}`,
+                name: p.name,
+                path: p.path,
+                description: p.description,
+                techStack: p.techStack || [],
+                source: 'local',
+                hasGit: p.hasGit
+              })
+            }
+          })
+        }
+      }
+
+      setProjects(allProjects)
+      onProjectsLoaded?.(allProjects)
+
+      // Auto-select the newly created/saved project
+      const newProject = allProjects.find(p => p.id === savedProject.id)
+      if (newProject) {
+        onSelect(newProject)
+      }
+    } catch (err) {
+      console.error('Failed to reload projects:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div ref={dropdownRef} className={`relative ${className}`}>
       {/* 选择按钮 */}
@@ -202,9 +297,9 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
 
       {/* 下拉菜单 */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-80 overflow-hidden">
+        <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-96 flex flex-col">
           {/* 搜索框 */}
-          <div className="p-2 border-b border-gray-700">
+          <div className="p-2 border-b border-gray-700 flex-shrink-0">
             <input
               type="text"
               value={searchQuery}
@@ -216,7 +311,7 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
           </div>
 
           {/* 项目列表 */}
-          <div className="overflow-y-auto max-h-60">
+          <div className="overflow-y-auto flex-1 min-h-0">
             {loading ? (
               <div className="p-4 text-center">
                 <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
@@ -259,6 +354,8 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
                         project={project}
                         isSelected={selectedProject?.id === project.id}
                         onSelect={handleSelect}
+                        onSave={handleSaveLocalProject}
+                        showSaveButton
                       />
                     ))}
                   </div>
@@ -266,8 +363,31 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
               </>
             )}
           </div>
+
+          {/* New Project Button */}
+          <div className="p-2 border-t border-gray-700 flex-shrink-0 bg-gray-800">
+            <button
+              type="button"
+              onClick={handleOpenCreateDialog}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Project
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Project Dialog */}
+      <ProjectDialog
+        isOpen={showDialog}
+        onClose={() => setShowDialog(false)}
+        onSuccess={handleDialogSuccess}
+        mode={dialogMode}
+        initialData={dialogInitialData}
+      />
     </div>
   )
 }
@@ -276,19 +396,22 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
 function ProjectItem({
   project,
   isSelected,
-  onSelect
+  onSelect,
+  onSave,
+  showSaveButton = false,
 }: {
   project: Project
   isSelected: boolean
   onSelect: (project: Project) => void
+  onSave?: (project: Project, e: React.MouseEvent) => void
+  showSaveButton?: boolean
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(project)}
-      className={`w-full px-3 py-2 text-left hover:bg-gray-700 transition-colors ${
+    <div
+      className={`w-full px-3 py-2 text-left hover:bg-gray-700 transition-colors cursor-pointer ${
         isSelected ? 'bg-gray-700' : ''
       }`}
+      onClick={() => onSelect(project)}
     >
       <div className="flex items-center justify-between">
         <span className="font-medium text-white">{project.name}</span>
@@ -299,6 +422,18 @@ function ProjectItem({
                 <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
               </svg>
             </span>
+          )}
+          {showSaveButton && onSave && (
+            <button
+              type="button"
+              onClick={(e) => onSave(project, e)}
+              className="p-1 text-gray-400 hover:text-blue-400 hover:bg-gray-600 rounded transition-colors"
+              title="Save to database"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </button>
           )}
           {isSelected && (
             <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -330,6 +465,6 @@ function ProjectItem({
           {project.path}
         </p>
       )}
-    </button>
+    </div>
   )
 }
