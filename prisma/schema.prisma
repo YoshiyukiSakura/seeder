@@ -325,6 +325,22 @@ model ProjectLock {
   @@index([expiresAt])
 }
 
+// Worktree 级别锁，用于并发执行同一项目的多个 Plan
+model WorktreeLock {
+  id            String    @id @default(cuid())
+  projectId     String                  // 所属项目
+  executionId   String    @unique       // 绑定的执行 ID（一个执行只能有一个 worktree）
+  worktreePath  String    @unique       // worktree 路径（全局唯一）
+  branchName    String                  // 检出的分支名
+
+  // 锁定时间
+  lockedAt      DateTime  @default(now())
+  expiresAt     DateTime                // 自动过期时间
+
+  @@index([projectId])
+  @@index([expiresAt])
+}
+
 // ==================== Reviewer Enums ====================
 
 enum ReviewStatus {
