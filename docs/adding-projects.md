@@ -14,6 +14,57 @@ If you need to clone private repositories, you must first give the server's GitH
 
 > Note: Contact your administrator to get the server's GitHub account username.
 
+### SSH Config for Multiple Accounts
+
+If team members use different GitHub accounts to access private repositories, you can configure SSH to use custom hosts.
+
+#### Step 1: Generate SSH Key
+
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com" -f ~/.ssh/id_hanwen
+```
+
+#### Step 2: Add Public Key to GitHub
+
+1. Copy the contents of `~/.ssh/id_hanwen.pub`
+2. Go to GitHub → Settings → SSH and GPG keys → New SSH key
+3. Paste the public key and save
+
+#### Step 3: Configure ~/.ssh/config
+
+Add the following to `~/.ssh/config`:
+
+```
+Host github-hanwen
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_hanwen
+  IdentitiesOnly yes
+```
+
+#### Step 4: Test Connection
+
+```bash
+ssh -T git@github-hanwen
+# Should output: Hi username! You've successfully authenticated...
+```
+
+#### Step 5: Use in Seedbed
+
+Now you can use the custom host format when adding projects:
+
+```
+git@github-hanwen:owner/repo.git
+```
+
+Instead of the standard format:
+
+```
+git@github.com:owner/repo.git
+```
+
+> **Tip**: Each team member can configure their own SSH host (e.g., `github-alice`, `github-bob`) to access private repos using their own GitHub accounts.
+
 ---
 
 ## Adding Projects via UI (Recommended)

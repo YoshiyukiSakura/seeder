@@ -77,6 +77,92 @@ export default function FromGitPage() {
         </div>
       </section>
 
+      {/* 使用 SSH Config */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4 text-white">使用 SSH Config（私有仓库推荐）</h2>
+        <p className="text-gray-300 mb-4">
+          如果你需要访问私有仓库，或者团队成员使用不同的 GitHub 账号，可以通过配置 SSH Config 使用自定义 Host。
+        </p>
+
+        {/* 自定义 Host 格式 */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-medium text-green-400 uppercase">自定义 Host</span>
+            <span className="text-xs text-gray-500">（推荐用于多账号场景）</span>
+          </div>
+          <code className="block bg-gray-900 border border-gray-700 rounded px-4 py-3 text-green-400 font-mono text-sm">
+            git@github-hanwen:owner/repository.git
+          </code>
+          <p className="text-xs text-gray-500 mt-2">
+            其中 <code className="text-green-400">github-hanwen</code> 是你在 ~/.ssh/config 中定义的 Host 名称
+          </p>
+        </div>
+
+        {/* 配置步骤 */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-4">
+          <h3 className="text-lg font-medium text-white mb-4">配置步骤</h3>
+          <ol className="space-y-4 text-gray-300">
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">1</span>
+              <div className="flex-1">
+                <strong className="text-white">生成 SSH 密钥</strong>
+                <code className="block bg-gray-900 border border-gray-700 rounded px-3 py-2 text-green-400 font-mono text-sm mt-2">
+                  ssh-keygen -t ed25519 -C &quot;your_email@example.com&quot; -f ~/.ssh/id_hanwen
+                </code>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">2</span>
+              <div className="flex-1">
+                <strong className="text-white">将公钥添加到 GitHub</strong>
+                <p className="text-sm text-gray-400 mt-1">
+                  复制 <code className="text-green-400">~/.ssh/id_hanwen.pub</code> 内容，添加到 GitHub → Settings → SSH and GPG keys
+                </p>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">3</span>
+              <div className="flex-1">
+                <strong className="text-white">配置 ~/.ssh/config</strong>
+                <pre className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-green-400 font-mono text-sm mt-2 overflow-x-auto">
+{`Host github-hanwen
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_hanwen
+  IdentitiesOnly yes`}
+                </pre>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">4</span>
+              <div className="flex-1">
+                <strong className="text-white">测试连接</strong>
+                <code className="block bg-gray-900 border border-gray-700 rounded px-3 py-2 text-green-400 font-mono text-sm mt-2">
+                  ssh -T git@github-hanwen
+                </code>
+                <p className="text-sm text-gray-400 mt-1">
+                  成功后会显示: Hi username! You&apos;ve successfully authenticated...
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        {/* 在 Seedbed 中使用 */}
+        <div className="bg-green-900/20 border border-green-800 rounded-lg p-4">
+          <div className="flex gap-3">
+            <svg className="w-6 h-6 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="text-green-300 text-sm">
+                <strong>在 Seedbed 中使用：</strong>配置完成后，在添加项目时直接使用 <code className="bg-gray-800 px-1 rounded">git@github-hanwen:owner/repo.git</code> 格式的 URL 即可。系统会自动使用你配置的 SSH 密钥进行认证。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* AI 分析功能 */}
       <section className="mb-8">
         <h2 className="text-2xl font-semibold mb-4 text-white">AI 智能分析自动填充</h2>
