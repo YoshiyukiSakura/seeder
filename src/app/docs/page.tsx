@@ -6,19 +6,144 @@ export default function DocsPage() {
       <div className="max-w-4xl mx-auto px-6 py-12">
         <h1 className="text-4xl font-bold mb-8 text-white">Documentation</h1>
 
+        <CompleteWorkflowSection />
         <ProjectsSection />
       </div>
     </div>
   )
 }
 
-function ProjectsSection() {
+function CompleteWorkflowSection() {
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 mb-12">
       <div>
         <h2 className="text-3xl font-semibold mb-4 text-white border-b border-gray-700 pb-2">
-          Creating Projects from Git URL
+          Complete Workflow
         </h2>
+        <p className="text-gray-300 mb-6">
+          Follow these steps to get started with Seedbed and manage your development workflow.
+        </p>
+      </div>
+
+      {/* Step 0: Select or Create Project */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            0
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Select or Create a Project</h3>
+            <p className="text-gray-300 mb-4">
+              <strong className="text-white">Projects are the foundation of your work in Seedbed.</strong> Every conversation,
+              task, and plan is associated with a specific project. Before you can start working, you need to either
+              select an existing project or create a new one.
+            </p>
+
+            <div className="space-y-4 mt-6">
+              {/* Select Existing Project */}
+              <div className="bg-gray-900 border border-gray-600 rounded-lg p-4">
+                <h4 className="text-lg font-semibold mb-2 text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  Select an Existing Project
+                </h4>
+                <p className="text-gray-400 text-sm mb-3">
+                  If you've already created projects, you can select one from the Project Selector dropdown
+                  in the chat interface.
+                </p>
+                <ul className="space-y-2 text-gray-300 text-sm">
+                  <li className="flex gap-2">
+                    <span className="text-indigo-400">•</span>
+                    <span>Click the <strong className="text-white">Project Selector</strong> dropdown</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-indigo-400">•</span>
+                    <span>Choose from your <strong className="text-white">Saved Projects</strong> list</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-indigo-400">•</span>
+                    <span>The selected project will persist across sessions</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Create New Project */}
+              <div className="bg-gray-900 border border-gray-600 rounded-lg p-4">
+                <h4 className="text-lg font-semibold mb-2 text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create a New Project
+                </h4>
+                <p className="text-gray-400 text-sm mb-3">
+                  You can create a new project using one of two methods:
+                </p>
+                <div className="space-y-3">
+                  <div className="bg-gray-800 rounded p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium text-blue-400">Method 1:</span>
+                      <span className="text-white text-sm font-semibold">From Git URL</span>
+                    </div>
+                    <p className="text-gray-400 text-xs">
+                      Automatically clone a repository and analyze it with AI to extract project details.
+                      Perfect for starting with existing repositories.
+                    </p>
+                  </div>
+                  <div className="bg-gray-800 rounded p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium text-green-400">Method 2:</span>
+                      <span className="text-white text-sm font-semibold">From Local Directory</span>
+                    </div>
+                    <p className="text-gray-400 text-xs">
+                      Link an existing local project directory to Seedbed. Ideal for projects you've already
+                      cloned or created manually.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cross Reference */}
+              <div className="bg-indigo-900/20 border border-indigo-800 rounded-lg p-4">
+                <div className="flex gap-3">
+                  <svg className="w-6 h-6 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-indigo-300 text-sm">
+                      <strong>Learn More:</strong> For detailed instructions on creating projects, see the{' '}
+                      <a href="#projects-section" className="underline hover:text-indigo-200 font-semibold">
+                        Project Management
+                      </a>{' '}
+                      section below, which covers both Git URL and Local Directory methods.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ProjectsSection() {
+  return (
+    <section id="projects-section" className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-semibold mb-4 text-white border-b border-gray-700 pb-2">
+          Project Management
+        </h2>
+        <p className="text-gray-300 mb-6">
+          Learn how to create and manage projects in Seedbed using different methods.
+        </p>
+      </div>
+
+      <div>
+        <h3 className="text-2xl font-semibold mb-4 text-white">
+          Creating Projects from Git URL
+        </h3>
         <p className="text-gray-300 mb-6">
           Seedbed supports creating projects directly from Git repositories. Simply provide a Git URL,
           and the system will automatically clone the repository and analyze its contents using AI.
