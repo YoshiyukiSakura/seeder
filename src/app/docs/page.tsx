@@ -353,6 +353,72 @@ function ProjectsSection() {
           </details>
         </div>
       </div>
+
+      {/* Deleting Projects */}
+      <div>
+        <h3 className="text-2xl font-semibold mb-4 text-white">Deleting Projects</h3>
+        <p className="text-gray-300 mb-4">
+          You can delete projects from your Saved Projects list when they are no longer needed.
+        </p>
+
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+          <h4 className="text-lg font-semibold mb-4 text-white">Steps to Delete a Project</h4>
+          <ol className="space-y-3 text-gray-300">
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-medium">1</span>
+              <span>Open the <strong className="text-white">Project Selector</strong> dropdown in the chat interface</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-medium">2</span>
+              <span>Find the project you want to delete in the <strong className="text-white">Saved Projects</strong> list</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-medium">3</span>
+              <span>Click the <strong className="text-white">Delete</strong> button (trash icon) next to the project</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-medium">4</span>
+              <span>Confirm the deletion in the confirmation dialog</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-medium">5</span>
+              <span>The project will be removed and the project selection will be automatically cleared</span>
+            </li>
+          </ol>
+        </div>
+
+        <div className="mt-4 bg-red-900/20 border border-red-800 rounded-lg p-4">
+          <div className="flex gap-3">
+            <svg className="w-6 h-6 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div className="space-y-2">
+              <p className="text-red-300 text-sm">
+                <strong>Important:</strong> Deleting a project is permanent and cannot be undone.
+              </p>
+              <ul className="text-red-300 text-sm space-y-1 list-disc list-inside ml-2">
+                <li>All conversations related to this project will be deleted</li>
+                <li>All plans and tasks associated with this project will be removed</li>
+                <li>Your local files in <code className="bg-gray-900 px-2 py-0.5 rounded text-green-400">~/projects/</code> will NOT be deleted</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+          <div className="flex gap-3">
+            <svg className="w-6 h-6 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="text-blue-300 text-sm">
+                <strong>Note:</strong> After deletion, if you still have the local repository, you can re-add the project
+                by creating a new project with the same Git URL or using the "Save Local Project" feature.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   )
 }
