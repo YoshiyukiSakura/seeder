@@ -270,7 +270,15 @@ export function ProjectDialog({
                 </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Enter Git URL, then click AI to auto-fill project details
+                支持 HTTPS 和 SSH 格式 (如 git@github.com:owner/repo.git)。{' '}
+                <a
+                  href="/docs/projects/from-git"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
+                  了解更多
+                </a>
               </p>
             </div>
           )}
