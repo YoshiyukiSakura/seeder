@@ -7,6 +7,7 @@ export default function DocsPage() {
         <h1 className="text-4xl font-bold mb-8 text-white">Documentation</h1>
 
         <CompleteWorkflowSection />
+        <QuickStartSection />
         <ProjectsSection />
       </div>
     </div>
@@ -123,6 +124,334 @@ function CompleteWorkflowSection() {
             </div>
           </div>
         </div>
+      </div>
+    </section>
+  )
+}
+
+function QuickStartSection() {
+  return (
+    <section className="space-y-6 mb-12">
+      <div>
+        <h2 className="text-3xl font-semibold mb-4 text-white border-b border-gray-700 pb-2">
+          Quick Start Guide
+        </h2>
+        <p className="text-gray-300 mb-6">
+          Follow these steps to quickly get started with Seedbed and begin your development work.
+        </p>
+      </div>
+
+      {/* Step 0: Choose Project */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            0
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Choose a Project</h3>
+            <p className="text-gray-300 mb-4">
+              Before you start, you need to select or create a project. Projects are the foundation of your work in Seedbed.
+            </p>
+
+            <div className="space-y-4 mt-6">
+              {/* Recommended: Create from Git URL */}
+              <div className="bg-gradient-to-r from-green-900/40 to-green-800/20 border border-green-700 rounded-lg p-4">
+                <h4 className="text-lg font-semibold mb-2 text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Recommended: Create from Git URL
+                </h4>
+                <p className="text-gray-300 text-sm mb-3">
+                  The best way to start is by creating a project from a Git repository. This automatically clones
+                  the repository and uses AI to analyze and extract project details for you.
+                </p>
+                <ul className="space-y-2 text-gray-300 text-sm">
+                  <li className="flex gap-2">
+                    <span className="text-green-400">•</span>
+                    <span>Automatic repository cloning</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-green-400">•</span>
+                    <span>AI-powered project analysis</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-green-400">•</span>
+                    <span>Auto-filled project details (name, description, tech stack)</span>
+                  </li>
+                </ul>
+                <div className="mt-3 text-xs text-green-200">
+                  See the{' '}
+                  <a href="#projects-section" className="underline hover:text-green-100 font-semibold">
+                    Project Management
+                  </a>{' '}
+                  section for detailed instructions.
+                </div>
+              </div>
+
+              {/* Quick Start: No Project */}
+              <div className="bg-gray-900 border border-gray-600 rounded-lg p-4">
+                <h4 className="text-lg font-semibold mb-2 text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Quick Start: Begin Without a Project
+                </h4>
+                <p className="text-gray-400 text-sm mb-2">
+                  You can start chatting immediately without selecting a project. This is useful for:
+                </p>
+                <ul className="space-y-2 text-gray-300 text-sm">
+                  <li className="flex gap-2">
+                    <span className="text-blue-400">•</span>
+                    <span>General questions and discussions</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-blue-400">•</span>
+                    <span>Testing Seedbed's capabilities</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-blue-400">•</span>
+                    <span>Planning before creating a project</span>
+                  </li>
+                </ul>
+                <div className="mt-3 bg-yellow-900/30 border border-yellow-800/50 rounded p-2">
+                  <p className="text-yellow-200 text-xs">
+                    <strong>Note:</strong> Some features like task management and project-specific context require a selected project.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 1: Start Chatting */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            1
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Start Chatting</h3>
+            <p className="text-gray-300 mb-4">
+              Open the chat interface and start a conversation with Seedbed. You can ask questions, request code reviews,
+              or get help with your development tasks.
+            </p>
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-2">Example prompts:</p>
+              <ul className="space-y-2 text-sm text-gray-300">
+                <li className="font-mono bg-gray-800 px-3 py-2 rounded">"Help me set up a new React project"</li>
+                <li className="font-mono bg-gray-800 px-3 py-2 rounded">"Review this code for potential bugs"</li>
+                <li className="font-mono bg-gray-800 px-3 py-2 rounded">"Explain how authentication works in this project"</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 2: Upload Images */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            2
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Upload Images (Optional)</h3>
+            <p className="text-gray-300 mb-4">
+              Share screenshots, diagrams, or UI mockups to get visual context for your discussions.
+            </p>
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-3">Three ways to upload images:</p>
+              <ul className="space-y-2 text-sm text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">1.</span>
+                  <span><strong className="text-white">File Selection:</strong> Click the upload button in the chat input</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">2.</span>
+                  <span><strong className="text-white">Paste:</strong> Use Cmd+V to paste images from clipboard</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">3.</span>
+                  <span><strong className="text-white">Drag & Drop:</strong> Drag image files into the chat area</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 3: Create Plans */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            3
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Create Development Plans</h3>
+            <p className="text-gray-300 mb-4">
+              Seedbed can help you create structured development plans for your projects. Plans break down complex
+              tasks into manageable steps.
+            </p>
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-3">To create a plan:</p>
+              <ul className="space-y-2 text-sm text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Describe what you want to build or accomplish</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Seedbed will analyze and create a detailed plan</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Review and approve the plan before implementation</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 4: Extract Tasks */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            4
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Extract and Track Tasks</h3>
+            <p className="text-gray-300 mb-4">
+              After completing a plan, extract actionable tasks from the conversation and track your progress.
+            </p>
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-3">Task workflow:</p>
+              <ul className="space-y-2 text-sm text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Click <strong className="text-white">"Extract Tasks"</strong> after plan completion</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Review and edit the auto-extracted tasks</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Track progress as you work through implementation</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Mark tasks as complete when finished</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 5: Monitor Progress */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            5
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Monitor Your Progress</h3>
+            <p className="text-gray-300 mb-4">
+              Keep track of your conversations, plans, and tasks through the Seedbed interface.
+            </p>
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-3">Available monitoring features:</p>
+              <ul className="space-y-2 text-sm text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>View all conversations by project</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Check plan status and completion</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Track task progress and statistics</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Review project activity and metrics</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 6: Collaborate and Iterate */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex-shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center text-lg font-bold">
+            6
+          </span>
+          <div className="flex-1">
+            <h3 className="text-2xl font-semibold mb-3 text-white">Collaborate and Iterate</h3>
+            <p className="text-gray-300 mb-4">
+              Continue the development cycle by refining plans, creating new tasks, and iterating on your project.
+            </p>
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-3">Best practices:</p>
+              <ul className="space-y-2 text-sm text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Break large features into smaller, manageable plans</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Use conversations to document decisions and rationale</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Regularly review and update task status</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-indigo-400">•</span>
+                  <span>Leverage Seedbed's AI for code reviews and suggestions</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Next Steps */}
+      <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-700 rounded-lg p-6">
+        <h3 className="text-xl font-semibold mb-4 text-white flex items-center gap-2">
+          <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+          Next Steps
+        </h3>
+        <p className="text-gray-300 mb-4">
+          Now that you understand the basics, explore the detailed documentation sections below to learn more about:
+        </p>
+        <ul className="space-y-2 text-gray-300">
+          <li className="flex gap-2">
+            <span className="text-indigo-400">•</span>
+            <span>
+              <a href="#projects-section" className="underline hover:text-indigo-200 font-semibold">
+                Project Management
+              </a>{' '}
+              - Creating and managing projects
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-indigo-400">•</span>
+            <span>Advanced features and workflows</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-indigo-400">•</span>
+            <span>Tips for maximizing productivity with Seedbed</span>
+          </li>
+        </ul>
       </div>
     </section>
   )
