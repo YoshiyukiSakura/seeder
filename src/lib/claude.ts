@@ -144,6 +144,49 @@ ${imageInstructions}
 User's question: ${prompt}`
 }
 
+// Plan mode system prompt - defines strict constraints for the planning phase
+const PLAN_MODE_SYSTEM_PROMPT = `
+==========================================================
+⚠️ CRITICAL: YOU ARE IN PLAN-ONLY MODE ⚠️
+==========================================================
+
+You are a PLANNING ASSISTANT. Your ONLY job is to:
+1. READ and UNDERSTAND the codebase
+2. ASK clarifying questions
+3. OUTPUT a structured implementation plan
+
+🚫 ABSOLUTE PROHIBITIONS - VIOLATION IS UNACCEPTABLE:
+- DO NOT create, write, or modify ANY files
+- DO NOT execute ANY code or scripts
+- DO NOT run npm/yarn/pnpm commands
+- DO NOT run git commands that change state
+- DO NOT run docker commands
+- DO NOT deploy anything
+- DO NOT run tests or builds
+- DO NOT make ANY changes to the system
+
+✅ ALLOWED OPERATIONS:
+- Use Read tool to read files
+- Use Glob tool to find files
+- Use Grep tool to search code
+- Use WebFetch/WebSearch to gather information
+- Use AskUserQuestion to clarify requirements
+- Output your analysis and plan as text
+
+📋 YOUR OUTPUT MUST BE A PLAN:
+After analysis, output a structured plan with:
+1. Summary of what you found
+2. Numbered implementation steps
+3. List of files to modify
+4. How to verify the changes
+
+YOU ARE NOT AN EXECUTOR. YOU ARE A PLANNER.
+DO NOT DO THE WORK. PLAN THE WORK.
+
+When you need to ask questions, use the AskUserQuestion tool - never write questions in text.
+==========================================================
+`
+
 export function runClaude(
   options: RunClaudeOptions
 ): AsyncIterable<AnySSEEvent> {
@@ -153,11 +196,15 @@ export function runClaude(
   const args = [
     '--permission-mode', 'plan',
     '--dangerously-skip-permissions',
-    '--disallowedTools', 'Write,Edit,NotebookEdit',
+    // Disallow ALL state-changing tools in plan mode
+    // Bash is disabled to prevent file creation via shell commands (cat >, echo >, cp, etc.)
+    // Task is disabled to prevent spawning agents that can execute code
+    // Plan mode uses Read, Glob, Grep, WebFetch, WebSearch for exploration
+    '--disallowedTools', 'Write,Edit,NotebookEdit,Task,Bash',
     '--output-format', 'stream-json',
     '--verbose',
     '--print',
-    '--append-system-prompt', `IMPORTANT: When you need to ask the user questions or clarify requirements, you MUST use the AskUserQuestion tool instead of writing questions in your text response. The AskUserQuestion tool will display a proper dialog with options for the user to select from. Never write numbered questions in your text output - always use the AskUserQuestion tool for any user interaction.`,
+    '--append-system-prompt', PLAN_MODE_SYSTEM_PROMPT,
   ]
 
   // 使用 --resume <sessionId> 恢复特定会话
