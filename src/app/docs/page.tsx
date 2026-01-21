@@ -354,6 +354,181 @@ function ProjectsSection() {
         </div>
       </div>
 
+      {/* Creating Projects from Local Directory */}
+      <div>
+        <h2 className="text-3xl font-semibold mb-4 text-white border-b border-gray-700 pb-2">
+          Creating Projects from Local Directory
+        </h2>
+        <p className="text-gray-300 mb-6">
+          If you already have a project on your local machine, you can add it to Seedbed by specifying
+          the local directory path. This is useful for existing projects or when you want to manually
+          manage your repository.
+        </p>
+      </div>
+
+      {/* Quick Start - Local Directory */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <h3 className="text-xl font-semibold mb-4 text-white">Quick Start</h3>
+        <ol className="space-y-3 text-gray-300">
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">1</span>
+            <span>Click the <strong className="text-white">Project Selector</strong> dropdown in the chat interface</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">2</span>
+            <span>Click <strong className="text-white">+ New Project</strong> at the bottom</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">3</span>
+            <span>Enter basic project information (Name and Description)</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">4</span>
+            <span>Click <strong className="text-white">Advanced Options</strong> to expand additional fields</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">5</span>
+            <span>Enter the absolute path to your local project in the <strong className="text-white">Local Path</strong> field</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">6</span>
+            <span>Fill in the <strong className="text-white">Tech Stack</strong> field with your project's technologies</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-medium">7</span>
+            <span>Click <strong className="text-white">Create Project</strong> to save the project</span>
+          </li>
+        </ol>
+      </div>
+
+      {/* Local Path Details */}
+      <div>
+        <h3 className="text-2xl font-semibold mb-4 text-white">Local Path Requirements</h3>
+        <p className="text-gray-300 mb-4">
+          The local path must be an absolute path to a directory on your machine:
+        </p>
+
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-medium text-green-400 uppercase">Absolute Path</span>
+            <span className="text-xs text-gray-500">(Full path from root)</span>
+          </div>
+          <code className="block bg-gray-900 border border-gray-700 rounded px-4 py-3 text-green-400 font-mono text-sm">
+            /Users/username/projects/my-project
+          </code>
+          <p className="text-xs text-gray-500 mt-2">
+            Example: /Users/john/projects/my-app or ~/projects/my-app
+          </p>
+        </div>
+
+        <div className="mt-4 bg-yellow-900/20 border border-yellow-800 rounded-lg p-4">
+          <div className="flex gap-3">
+            <svg className="w-6 h-6 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <p className="text-yellow-300 text-sm">
+                <strong>Important:</strong> The directory must exist before creating the project. Seedbed will
+                not create the directory for you - it will only reference the existing location.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Example Workflow - Local */}
+      <div>
+        <h3 className="text-2xl font-semibold mb-4 text-white">Example Workflow</h3>
+        <p className="text-gray-300 mb-4">
+          Here's a complete example of creating a project from a local directory:
+        </p>
+
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-4">
+          <div>
+            <div className="text-sm font-medium text-gray-400 mb-2">Step 1: Enter Basic Information</div>
+            <div className="bg-gray-900 border border-gray-700 rounded p-4 space-y-2 text-sm">
+              <div className="flex gap-2">
+                <span className="text-gray-500 w-24">Name:</span>
+                <span className="text-green-400">My Web App</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-gray-500 w-24">Description:</span>
+                <span className="text-green-400">A full-stack web application</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-gray-400 mb-2">Step 2: Expand Advanced Options & Fill Details</div>
+            <div className="bg-gray-900 border border-gray-700 rounded p-4 space-y-2 text-sm">
+              <div className="flex gap-2">
+                <span className="text-gray-500 w-24">Local Path:</span>
+                <span className="text-green-400">/Users/john/projects/my-web-app</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-gray-500 w-24">Tech Stack:</span>
+                <span className="text-green-400">React, TypeScript, Node.js, PostgreSQL</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-gray-400 mb-2">Step 3: Result</div>
+            <code className="block bg-gray-900 border border-gray-700 rounded px-4 py-3 text-green-400 font-mono text-sm">
+              Project saved and ready to use!
+            </code>
+          </div>
+        </div>
+      </div>
+
+      {/* Tips - Local Projects */}
+      <div>
+        <h3 className="text-2xl font-semibold mb-4 text-white">Tips & Best Practices</h3>
+        <div className="space-y-3">
+          <div className="bg-green-900/20 border border-green-800 rounded-lg p-4">
+            <div className="flex gap-3">
+              <svg className="w-6 h-6 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-green-300 text-sm">
+                  <strong>Use tilde (~) for home directory</strong> - You can use <code className="bg-gray-900 px-2 py-0.5 rounded text-green-400">~/projects/my-app</code> instead
+                  of the full path like <code className="bg-gray-900 px-2 py-0.5 rounded text-green-400">/Users/username/projects/my-app</code>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+            <div className="flex gap-3">
+              <svg className="w-6 h-6 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-blue-300 text-sm">
+                  <strong>Tech Stack information</strong> - Providing accurate tech stack information helps Seedbed
+                  better understand your project and provide more relevant assistance.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-purple-900/20 border border-purple-800 rounded-lg p-4">
+            <div className="flex gap-3">
+              <svg className="w-6 h-6 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-purple-300 text-sm">
+                  <strong>Manual repository management</strong> - When using local paths, you're responsible for managing
+                  Git operations (pull, push, branch switching) yourself. Seedbed only references the location.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Deleting Projects */}
       <div>
         <h3 className="text-2xl font-semibold mb-4 text-white">Deleting Projects</h3>
