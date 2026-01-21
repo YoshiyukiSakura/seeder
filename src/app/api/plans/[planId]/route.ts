@@ -121,16 +121,30 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // 检测是否是发布操作
     const isPublishing = body.status === 'PUBLISHED' && existing.status !== 'PUBLISHED'
 
-    // 如果是发布操作，生成摘要
+    // 如果是发布操作，并行生成摘要和标题
     let summary: string | undefined
+    let generatedTitle: string | undefined
     if (isPublishing) {
-      try {
-        const { generatePlanSummary } = await import('@/lib/summary-generator')
-        summary = await generatePlanSummary(planId)
+      const { generatePlanSummary } = await import('@/lib/summary-generator')
+      const { generatePlanTitle } = await import('@/lib/title-generator')
+
+      const [summaryResult, titleResult] = await Promise.allSettled([
+        generatePlanSummary(planId),
+        generatePlanTitle(planId)
+      ])
+
+      if (summaryResult.status === 'fulfilled') {
+        summary = summaryResult.value
         console.log(`Generated summary for plan ${planId}: ${summary}`)
-      } catch (summaryError) {
-        // 生成失败不阻塞发布流程
-        console.error('Failed to generate summary:', summaryError)
+      } else {
+        console.error('Failed to generate summary:', summaryResult.reason)
+      }
+
+      if (titleResult.status === 'fulfilled') {
+        generatedTitle = titleResult.value
+        console.log(`Generated title for plan ${planId}: ${generatedTitle}`)
+      } else {
+        console.error('Failed to generate title:', titleResult.reason)
       }
     }
 
@@ -146,6 +160,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.sortOrder !== undefined) updateData.sortOrder = body.sortOrder
     if (isPublishing) updateData.publishedAt = new Date()
     if (summary) updateData.summary = summary
+    if (generatedTitle) updateData.name = generatedTitle
 
     const plan = await prisma.plan.update({
       where: { id: planId },
