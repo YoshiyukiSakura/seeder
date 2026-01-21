@@ -374,7 +374,7 @@ function HomeContent() {
           // 如果有 planId，保存任务到数据库
           if (planId) {
             const saveRes = await apiFetch(`/api/plans/${planId}/tasks`, {
-              method: 'POST',
+              method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ tasks: extractedTasks })
             })
@@ -1310,7 +1310,7 @@ function HomeContent() {
             onTaskDelete={handleTaskDelete}
             loading={state === 'processing'}
             extracting={extractingTasks}
-            canExtract={!!resultContent && tasks.length === 0}
+            canExtract={!!resultContent}
             onExtract={() => extractAndSetTasks(resultContent)}
             planId={planId}
             planStatus={planStatus}
