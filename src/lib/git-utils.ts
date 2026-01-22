@@ -155,3 +155,92 @@ export async function isValidGitRepo(repoPath: string): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Pull latest changes from remote
+ * @param repoPath - Path to the git repository
+ * @param branch - Branch to pull (defaults to current branch)
+ * @returns Result with success status and details
+ */
+export async function pullLatest(
+  repoPath: string,
+  branch?: string
+): Promise<{ success: true; message: string; updated: boolean } | { success: false; error: string }> {
+  // Verify it's a valid git repo
+  if (!await isValidGitRepo(repoPath)) {
+    return { success: false, error: 'Not a valid git repository' }
+  }
+
+  try {
+    // First fetch to see what's available
+    await execAsync(`git -C "${repoPath}" fetch`, { timeout: 60000 })
+
+    // Check if there are local changes that would be overwritten
+    const { stdout: statusOutput } = await execAsync(
+      `git -C "${repoPath}" status --porcelain`,
+      { timeout: 10000 }
+    )
+
+    if (statusOutput.trim()) {
+      // Has uncommitted changes - stash them, pull, then unstash
+      const hasStash = statusOutput.trim().length > 0
+      if (hasStash) {
+        await execAsync(`git -C "${repoPath}" stash push -m "auto-stash before pull"`, { timeout: 10000 })
+      }
+
+      try {
+        const pullCmd = branch
+          ? `git -C "${repoPath}" pull origin "${branch}"`
+          : `git -C "${repoPath}" pull`
+        const { stdout: pullOutput } = await execAsync(pullCmd, { timeout: 120000 })
+
+        // Restore stashed changes
+        if (hasStash) {
+          try {
+            await execAsync(`git -C "${repoPath}" stash pop`, { timeout: 10000 })
+          } catch (stashError) {
+            // Stash pop failed - likely conflict
+            return {
+              success: false,
+              error: `Pull succeeded but failed to restore local changes. Run 'git stash pop' manually to resolve conflicts.`
+            }
+          }
+        }
+
+        const updated = !pullOutput.includes('Already up to date')
+        return { success: true, message: pullOutput.trim(), updated }
+      } catch (pullError) {
+        // Pull failed - restore stash
+        if (hasStash) {
+          await execAsync(`git -C "${repoPath}" stash pop`, { timeout: 10000 }).catch(() => {})
+        }
+        throw pullError
+      }
+    }
+
+    // No local changes - simple pull
+    const pullCmd = branch
+      ? `git -C "${repoPath}" pull origin "${branch}"`
+      : `git -C "${repoPath}" pull`
+    const { stdout: pullOutput } = await execAsync(pullCmd, { timeout: 120000 })
+
+    const updated = !pullOutput.includes('Already up to date')
+    return { success: true, message: pullOutput.trim(), updated }
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+
+    // Parse common errors
+    if (errorMessage.includes('CONFLICT')) {
+      return { success: false, error: 'Merge conflict detected. Please resolve conflicts manually.' }
+    }
+    if (errorMessage.includes('Permission denied') || errorMessage.includes('Authentication failed')) {
+      return { success: false, error: 'Permission denied. Check your credentials.' }
+    }
+    if (errorMessage.includes('Could not resolve host')) {
+      return { success: false, error: 'Network error. Could not reach the remote.' }
+    }
+
+    return { success: false, error: `Git pull failed: ${errorMessage}` }
+  }
+}

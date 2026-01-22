@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { runClaude } from '@/lib/claude'
 import { createSSEError, encodeSSEEvent } from '@/lib/sse-types'
 import { prisma } from '@/lib/prisma'
+import { pullLatest } from '@/lib/git-utils'
 
 export async function POST(request: NextRequest) {
   let body: { prompt?: string; projectPath?: string; projectId?: string; imagePaths?: string[] }
@@ -36,6 +37,8 @@ export async function POST(request: NextRequest) {
 
   // 如果有 projectId，创建 Plan 并保存对话
   let planId: string | null = null
+  let gitSyncResult: { success: boolean; message?: string; error?: string; updated?: boolean } | null = null
+
   if (projectId) {
     try {
       // 验证项目存在
@@ -43,6 +46,17 @@ export async function POST(request: NextRequest) {
         where: { id: projectId }
       })
       if (project) {
+        // 在创建 Plan 之前，先同步 git 代码
+        if (project.localPath) {
+          console.log(`[git-sync] Pulling latest for project ${projectId} at ${project.localPath}`)
+          gitSyncResult = await pullLatest(project.localPath)
+          if (gitSyncResult.success) {
+            console.log(`[git-sync] Success: ${gitSyncResult.message}, updated: ${gitSyncResult.updated}`)
+          } else {
+            console.warn(`[git-sync] Failed: ${gitSyncResult.error}`)
+          }
+        }
+
         // 创建新的 Plan
         const plan = await prisma.plan.create({
           data: {
@@ -74,6 +88,15 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       let assistantContent = ''
       let claudeSessionId: string | null = null
+
+      // 发送 git 同步结果事件（如果有）
+      if (gitSyncResult) {
+        const gitSyncEvent = {
+          type: 'git_sync',
+          data: gitSyncResult
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(gitSyncEvent)}\n\n`))
+      }
 
       try {
         // 启动新会话（不传 sessionId）
