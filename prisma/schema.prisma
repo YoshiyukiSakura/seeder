@@ -192,6 +192,14 @@ enum PRStatus {
   CLOSED        // PR 已关闭（未合并）
 }
 
+// Merge 状态（用于追踪 Issue 级别的合并状态）
+enum MergeStatus {
+  NOT_MERGED    // 未合并
+  MERGING       // 合并中
+  MERGED        // 已合并
+  CONFLICT      // 合并冲突
+}
+
 // ==================== Farmer Models ====================
 
 model Execution {
@@ -201,6 +209,17 @@ model Execution {
 
   // 执行时的配置快照（防止执行中途 Project 配置变更导致不一致）
   config       Json?             // ExecutionConfig 类型
+
+  // 渐进式发布功能开关
+  // true  = 新执行器（ParallelRunner + WorktreeManager，并行执行）
+  // false = 旧执行器（传统单 worktree 模式，串行处理）
+  parallelMode         Boolean      @default(true)        // 新版并行执行模式开关
+
+  // 并行执行配置（新版使用，旧版忽略）
+  maxParallelIssues    Int          @default(3)           // 最大并行 Issue 数
+  maxWorktreesPerIssue Int          @default(1)           // 每个 Issue 最大 worktree 数
+  hasConflicts         Boolean      @default(false)       // 是否存在冲突
+  conflictedIssueIds   String[]     @default([])          // 冲突的 Issue ID 列表
 
   // 时间信息
   startedAt    DateTime?
@@ -241,6 +260,7 @@ model Execution {
   @@index([createdAt])
   @@index([prStatus])
   @@index([saturationGroupId])
+  @@index([parallelMode])
 }
 
 model IssueExecution {
@@ -254,6 +274,16 @@ model IssueExecution {
 
   // 状态
   status          IssueExecutionStatus  @default(PENDING)
+
+  // 并行执行相关字段
+  worktreePath    String?               // Worktree 路径
+  issueBranchName String?               // Issue 专属分支名
+  mergeStatus     MergeStatus           @default(NOT_MERGED) // 合并状态
+  attempt         Int                   @default(0)          // 执行尝试次数
+  claimedBy       String?               // 声明该任务的 Worker ID
+  claimLeaseAt    DateTime?             // 声明租约过期时间
+  blockedByIds    String[]              @default([])         // 阻塞此 Issue 的其他 Issue ID
+  level           Int                   @default(0)          // 依赖层级（0=无依赖）
 
   // Claude 会话
   claudeSessionId String?               // 用于恢复会话
@@ -282,6 +312,9 @@ model IssueExecution {
   @@index([executionId])
   @@index([taskId])
   @@index([status])
+  @@index([claimedBy])
+  @@index([level])
+  @@index([mergeStatus])
 }
 
 model ExecutionLog {
@@ -326,10 +359,11 @@ model ProjectLock {
 }
 
 // Worktree 级别锁，用于并发执行同一项目的多个 Plan
+// 注意：executionId 不再是 @unique，允许同一执行的多个 issue 并行创建各自的 worktree
 model WorktreeLock {
   id            String    @id @default(cuid())
   projectId     String                  // 所属项目
-  executionId   String    @unique       // 绑定的执行 ID（一个执行只能有一个 worktree）
+  executionId   String                  // 绑定的执行 ID（同一执行可有多个 worktree）
   worktreePath  String    @unique       // worktree 路径（全局唯一）
   branchName    String                  // 检出的分支名
 
@@ -338,6 +372,7 @@ model WorktreeLock {
   expiresAt     DateTime                // 自动过期时间
 
   @@index([projectId])
+  @@index([executionId])              // 用于查询执行的所有锁
   @@index([expiresAt])
 }
 
