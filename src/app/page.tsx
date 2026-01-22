@@ -362,12 +362,26 @@ function HomeContent() {
 
   // 使用 Gemini API 提取任务
   const extractAndSetTasks = async (planContent: string) => {
+    // 如果没有传入内容，尝试从最后一条 assistant 消息获取
+    let content = planContent
+    if (!content) {
+      const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content.length > 100)
+      if (lastAssistant) {
+        content = lastAssistant.content
+      }
+    }
+
+    if (!content) {
+      console.warn('No content available for task extraction')
+      return
+    }
+
     setExtractingTasks(true)
     try {
       const res = await apiFetch('/api/tasks/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planContent })
+        body: JSON.stringify({ planContent: content })
       })
       if (res.ok) {
         const { tasks: extractedTasks } = await res.json()
@@ -1376,7 +1390,7 @@ function HomeContent() {
             onTaskDelete={handleTaskDelete}
             loading={state === 'processing'}
             extracting={extractingTasks}
-            canExtract={!!resultContent}
+            canExtract={!!resultContent || (state === 'completed' && messages.some(m => m.role === 'assistant' && m.content.length > 100))}
             onExtract={() => extractAndSetTasks(resultContent)}
             planId={planId}
             planStatus={planStatus}
