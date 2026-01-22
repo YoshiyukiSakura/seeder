@@ -13,7 +13,8 @@ interface RouteParams {
   params: Promise<{ planId: string }>
 }
 
-const CONTROL_CHAR_PATTERN = /[\u0000-\u001f]/g
+// 移除控制字符，但保留 Tab(\u0009)、换行(\u000A)、回车(\u000D)
+const CONTROL_CHAR_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g
 
 function sanitizeText(value: string | null | undefined): string | null | undefined {
   if (typeof value !== 'string') return value
