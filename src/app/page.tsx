@@ -83,6 +83,7 @@ function HomeContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentPlanIdRef = useRef<string | null>(null)  // 用于跟踪当前正在处理的会话，避免重复恢复
+  const abortControllerRef = useRef<AbortController | null>(null)  // 用于中断请求
 
   // 判断是否是数据库项目（可以保存对话）
   const isDatabaseProject = selectedProject && selectedProject.source === 'database'
@@ -425,7 +426,7 @@ function HomeContent() {
     })
   }
 
-  const processSSE = async (response: Response, isInitial: boolean) => {
+  const processSSE = async (response: Response, isInitial: boolean, signal?: AbortSignal) => {
     const reader = response.body?.getReader()
     if (!reader) return
 
@@ -444,109 +445,123 @@ function HomeContent() {
       })
     }
 
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const jsonStr = line.slice(6)
-
-        try {
-          const event = JSON.parse(jsonStr)
-
-          switch (event.type) {
-            case 'init':
-              // 从 init 事件中获取 sessionId（比 result 更早可用）
-              if (event.data.sessionId) {
-                receivedSessionId = event.data.sessionId
-                setSessionId(event.data.sessionId)
-              }
-              break
-
-            case 'text':
-              updateLastAssistantMessage(event.data.content)
-              break
-
-            case 'tool':
-              const toolData = event.data as SSEToolData
-              setCurrentTools(prev => [...prev, toolData.name])
-              // 标记前一个工具为完成，添加新工具
-              setProgressState(prev => {
-                const updatedTools = prev.tools.map(t => {
-                  if (t.status === 'running') {
-                    return {
-                      ...t,
-                      status: 'completed' as const,
-                      endTime: toolData.timestamp,
-                      duration: toolData.timestamp - t.startTime
-                    }
-                  }
-                  return t
-                })
-                const newTool: ToolExecution = {
-                  id: toolData.id,
-                  name: toolData.name,
-                  summary: toolData.summary || '',
-                  startTime: toolData.timestamp,
-                  status: 'running'
-                }
-                return {
-                  ...prev,
-                  tools: [...updatedTools, newTool],
-                  currentToolId: toolData.id
-                }
-              })
-              break
-
-            case 'question':
-              // 只保留第一个有效的 question 事件，忽略后续的
-              // （Claude 可能从主 agent 和 Task 子 agent 发送多个 AskUserQuestion）
-              if (!hasQuestion && event.data?.questions?.length > 0) {
-                hasQuestion = true
-                setPendingQuestion(event.data)
-                setSelectedAnswers({})
-                setState('waiting_input')
-              }
-              break
-
-            case 'result':
-              if (event.data.content) {
-                updateLastAssistantMessage('\n\n---\n**Plan Complete**\n' + event.data.content)
-                // 保存计划内容，用于手动提取任务
-                setResultContent(event.data.content)
-              }
-              // 保存 sessionId 用于后续继续对话
-              if (event.data.sessionId) {
-                receivedSessionId = event.data.sessionId
-                setSessionId(event.data.sessionId)
-              }
-              // 保存 planId 用于后续继续对话
-              if (event.data.planId) {
-                setPlanId(event.data.planId)
-                currentPlanIdRef.current = event.data.planId  // 更新ref，防止URL变化触发重复恢复
-                // 刷新历史列表（新对话创建成功）
-                setHistoryRefreshTrigger(prev => prev + 1)
-              }
-              break
-
-            case 'error':
-              // 根据错误类型提供不同的提示
-              if (event.data.errorType === 'session_error') {
-                addMessage('system', `Session error: ${event.data.message}. Please start a new conversation.`)
-                setSessionId(null)  // 清空无效的 sessionId
-              } else {
-                addMessage('system', `Error: ${event.data.message}`)
-              }
-              break
-          }
-        } catch {
-          // ignore parse errors
+    try {
+      while (true) {
+        // 检查是否已中断
+        if (signal?.aborted) {
+          break
         }
+
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const jsonStr = line.slice(6)
+
+          try {
+            const event = JSON.parse(jsonStr)
+
+            switch (event.type) {
+              case 'init':
+                // 从 init 事件中获取 sessionId（比 result 更早可用）
+                if (event.data.sessionId) {
+                  receivedSessionId = event.data.sessionId
+                  setSessionId(event.data.sessionId)
+                }
+                break
+
+              case 'text':
+                updateLastAssistantMessage(event.data.content)
+                break
+
+              case 'tool':
+                const toolData = event.data as SSEToolData
+                setCurrentTools(prev => [...prev, toolData.name])
+                // 标记前一个工具为完成，添加新工具
+                setProgressState(prev => {
+                  const updatedTools = prev.tools.map(t => {
+                    if (t.status === 'running') {
+                      return {
+                        ...t,
+                        status: 'completed' as const,
+                        endTime: toolData.timestamp,
+                        duration: toolData.timestamp - t.startTime
+                      }
+                    }
+                    return t
+                  })
+                  const newTool: ToolExecution = {
+                    id: toolData.id,
+                    name: toolData.name,
+                    summary: toolData.summary || '',
+                    startTime: toolData.timestamp,
+                    status: 'running'
+                  }
+                  return {
+                    ...prev,
+                    tools: [...updatedTools, newTool],
+                    currentToolId: toolData.id
+                  }
+                })
+                break
+
+              case 'question':
+                // 只保留第一个有效的 question 事件，忽略后续的
+                // （Claude 可能从主 agent 和 Task 子 agent 发送多个 AskUserQuestion）
+                if (!hasQuestion && event.data?.questions?.length > 0) {
+                  hasQuestion = true
+                  setPendingQuestion(event.data)
+                  setSelectedAnswers({})
+                  setState('waiting_input')
+                }
+                break
+
+              case 'result':
+                if (event.data.content) {
+                  updateLastAssistantMessage('\n\n---\n**Plan Complete**\n' + event.data.content)
+                  // 保存计划内容，用于手动提取任务
+                  setResultContent(event.data.content)
+                }
+                // 保存 sessionId 用于后续继续对话
+                if (event.data.sessionId) {
+                  receivedSessionId = event.data.sessionId
+                  setSessionId(event.data.sessionId)
+                }
+                // 保存 planId 用于后续继续对话
+                if (event.data.planId) {
+                  setPlanId(event.data.planId)
+                  currentPlanIdRef.current = event.data.planId  // 更新ref，防止URL变化触发重复恢复
+                  // 刷新历史列表（新对话创建成功）
+                  setHistoryRefreshTrigger(prev => prev + 1)
+                }
+                break
+
+              case 'error':
+                // 根据错误类型提供不同的提示
+                if (event.data.errorType === 'session_error') {
+                  addMessage('system', `Session error: ${event.data.message}. Please start a new conversation.`)
+                  setSessionId(null)  // 清空无效的 sessionId
+                } else {
+                  addMessage('system', `Error: ${event.data.message}`)
+                }
+                break
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+    } finally {
+      // 确保 reader 被正确取消
+      try {
+        await reader.cancel()
+      } catch {
+        // 忽略取消错误
       }
     }
 
@@ -594,6 +609,10 @@ function HomeContent() {
 
     setState('processing')
     setPendingQuestion(null)
+
+    // 创建新的 AbortController
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
 
     try {
       // 上传图片获取路径（带进度显示）
@@ -650,9 +669,10 @@ function HomeContent() {
             planId,
             projectPath: selectedProject?.path,
             imagePaths: imagePaths.length > 0 ? imagePaths : undefined
-          })
+          }),
+          signal
         })
-        await processSSE(response, true)
+        await processSSE(response, true, signal)
       } else {
         // 启动新会话时清空旧的状态
         setSessionId(null)
@@ -667,13 +687,21 @@ function HomeContent() {
             // 只有数据库项目才传递 projectId，用于创建 Plan 和保存对话
             projectId: isDatabaseProject ? selectedProject.id : undefined,
             imagePaths: imagePaths.length > 0 ? imagePaths : undefined
-          })
+          }),
+          signal
         })
-        await processSSE(response, true)
+        await processSSE(response, true, signal)
       }
     } catch (error) {
+      // 如果是用户主动中断，不显示错误
+      if (error instanceof Error && error.name === 'AbortError') {
+        // 中断由 handleAbort 处理，这里不需要额外操作
+        return
+      }
       addMessage('system', `Request failed: ${error}`)
       setState('idle')
+    } finally {
+      abortControllerRef.current = null
     }
   }
 
@@ -795,6 +823,29 @@ function HomeContent() {
       }
     }
   }
+
+  // 中断当前对话
+  const handleAbort = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setState('idle')
+    setPendingQuestion(null)
+    setSelectedAnswers({})
+    setCurrentTools([])
+    // 标记正在运行的工具为完成状态
+    setProgressState(prev => ({
+      ...prev,
+      tools: prev.tools.map(t =>
+        t.status === 'running'
+          ? { ...t, status: 'completed' as const, endTime: Date.now(), duration: Date.now() - t.startTime }
+          : t
+      ),
+      currentToolId: null
+    }))
+    addMessage('system', 'Conversation interrupted. You can continue with a new message.')
+  }, [])
 
   // 开始新对话
   const handleNewConversation = () => {
@@ -1232,14 +1283,27 @@ function HomeContent() {
               className="flex-1 bg-gray-800 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
 
-            {/* 发送按钮 */}
-            <button
-              type="submit"
-              disabled={state === 'processing' || state === 'waiting_input' || (!input.trim() && attachedImages.length === 0)}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Send
-            </button>
+            {/* 发送/停止按钮 */}
+            {state === 'processing' ? (
+              <button
+                type="button"
+                onClick={handleAbort}
+                className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Stop
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={state === 'waiting_input' || (!input.trim() && attachedImages.length === 0)}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Send
+              </button>
+            )}
           </div>
           <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
             <span>

@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { pullLatest } from '@/lib/git-utils'
 
 export async function POST(request: NextRequest) {
+  // 获取请求的 abort signal
+  const signal = request.signal
+
   let body: { prompt?: string; projectPath?: string; projectId?: string; imagePaths?: string[] }
   try {
     body = await request.json()
@@ -101,8 +104,13 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // 启动新会话（不传 sessionId）
-        for await (const event of runClaude({ prompt, cwd, imagePaths })) {
+        // 启动新会话（不传 sessionId），传递 signal 以支持中断
+        for await (const event of runClaude({ prompt, cwd, imagePaths }, signal)) {
+          // 检查是否已中断
+          if (signal.aborted) {
+            controller.close()
+            return
+          }
           // 从 init 事件中捕获 sessionId 并立即保存到数据库
           // 这样即使 AskUserQuestion 时用户刷新页面，sessionId 也不会丢失
           if (event.type === 'init' && event.data?.sessionId && !claudeSessionId) {

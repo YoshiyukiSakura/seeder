@@ -188,7 +188,8 @@ When you need to ask questions, use the AskUserQuestion tool - never write quest
 `
 
 export function runClaude(
-  options: RunClaudeOptions
+  options: RunClaudeOptions,
+  signal?: AbortSignal  // 可选的中断信号
 ): AsyncIterable<AnySSEEvent> {
   const { prompt, cwd, sessionId, imagePaths } = options
   const finalPrompt = buildPromptWithImages(prompt, imagePaths)
@@ -219,6 +220,15 @@ export function runClaude(
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd,
   })
+
+  // 监听 abort signal，在中断时终止 Claude 进程
+  if (signal) {
+    signal.addEventListener('abort', () => {
+      if (!claude.killed) {
+        claude.kill('SIGTERM')
+      }
+    }, { once: true })
+  }
 
   claude.stdin.end()
 

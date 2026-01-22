@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { DbNull } from '@/generated/prisma/internal/prismaNamespace'
 
 export async function POST(request: NextRequest) {
+  // 获取请求的 abort signal
+  const signal = request.signal
+
   let body: { answer?: string; projectPath?: string; sessionId?: string; planId?: string; imagePaths?: string[] }
   try {
     body = await request.json()
@@ -73,8 +76,13 @@ export async function POST(request: NextRequest) {
       let assistantContent = ''
 
       try {
-        // 使用 --resume <sessionId> 恢复特定会话
-        for await (const event of runClaude({ prompt: answer, cwd, sessionId, imagePaths })) {
+        // 使用 --resume <sessionId> 恢复特定会话，传递 signal 以支持中断
+        for await (const event of runClaude({ prompt: answer, cwd, sessionId, imagePaths }, signal)) {
+          // 检查是否已中断
+          if (signal.aborted) {
+            controller.close()
+            return
+          }
           // 收集助手消息内容
           if (event.type === 'text' && event.data?.content) {
             assistantContent += event.data.content
