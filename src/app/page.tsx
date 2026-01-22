@@ -228,6 +228,7 @@ function HomeContent() {
   // 处理项目选择（包含持久化逻辑）
   const handleSelectProject = useCallback((project: Project | null) => {
     setSelectedProject(project)
+    setResultContent('')  // 清空结果内容，防止切换项目后 Extract Tasks 使用错误的数据
     if (project) {
       saveSelectedProjectId(project.id)
     } else {
@@ -813,6 +814,7 @@ function HomeContent() {
     setPlanStatus('DRAFT')
     setPlanName('')
     setPlanDescription('')
+    setResultContent('')  // 清空结果内容，防止 Extract Tasks 使用错误的数据
     router.replace('/', { scroll: false })
   }
 
