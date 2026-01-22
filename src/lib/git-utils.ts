@@ -157,6 +157,30 @@ export async function isValidGitRepo(repoPath: string): Promise<boolean> {
 }
 
 /**
+ * Get the current branch name
+ */
+async function getCurrentBranch(repoPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execAsync(`git -C "${repoPath}" branch --show-current`, { timeout: 10000 })
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Check if a remote branch exists
+ */
+async function remoteBranchExists(repoPath: string, branch: string): Promise<boolean> {
+  try {
+    const { stdout } = await execAsync(`git -C "${repoPath}" ls-remote --heads origin "${branch}"`, { timeout: 30000 })
+    return stdout.trim().length > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Pull latest changes from remote
  * @param repoPath - Path to the git repository
  * @param branch - Branch to pull (defaults to current branch)
@@ -175,35 +199,49 @@ export async function pullLatest(
     // First fetch to see what's available
     await execAsync(`git -C "${repoPath}" fetch`, { timeout: 60000 })
 
+    // Determine which branch to pull - default to main/master
+    let targetBranch = branch
+    if (!targetBranch) {
+      // Always prefer main/master for syncing latest code
+      if (await remoteBranchExists(repoPath, 'main')) {
+        targetBranch = 'main'
+      } else if (await remoteBranchExists(repoPath, 'master')) {
+        targetBranch = 'master'
+      } else {
+        // Fall back to current branch if main/master not found
+        const currentBranch = await getCurrentBranch(repoPath)
+        if (currentBranch && await remoteBranchExists(repoPath, currentBranch)) {
+          targetBranch = currentBranch
+        } else {
+          return { success: false, error: 'Could not find main/master branch on remote' }
+        }
+      }
+    }
+
     // Check if there are local changes that would be overwritten
     const { stdout: statusOutput } = await execAsync(
       `git -C "${repoPath}" status --porcelain`,
       { timeout: 10000 }
     )
 
+    // Always use explicit origin/branch format to avoid tracking issues
+    const pullCmd = `git -C "${repoPath}" pull origin "${targetBranch}"`
+
     if (statusOutput.trim()) {
       // Has uncommitted changes - stash them, pull, then unstash
-      const hasStash = statusOutput.trim().length > 0
-      if (hasStash) {
-        await execAsync(`git -C "${repoPath}" stash push -m "auto-stash before pull"`, { timeout: 10000 })
-      }
+      await execAsync(`git -C "${repoPath}" stash push -m "auto-stash before pull"`, { timeout: 10000 })
 
       try {
-        const pullCmd = branch
-          ? `git -C "${repoPath}" pull origin "${branch}"`
-          : `git -C "${repoPath}" pull`
         const { stdout: pullOutput } = await execAsync(pullCmd, { timeout: 120000 })
 
         // Restore stashed changes
-        if (hasStash) {
-          try {
-            await execAsync(`git -C "${repoPath}" stash pop`, { timeout: 10000 })
-          } catch (stashError) {
-            // Stash pop failed - likely conflict
-            return {
-              success: false,
-              error: `Pull succeeded but failed to restore local changes. Run 'git stash pop' manually to resolve conflicts.`
-            }
+        try {
+          await execAsync(`git -C "${repoPath}" stash pop`, { timeout: 10000 })
+        } catch (stashError) {
+          // Stash pop failed - likely conflict
+          return {
+            success: false,
+            error: `Pull succeeded but failed to restore local changes. Run 'git stash pop' manually to resolve conflicts.`
           }
         }
 
@@ -211,17 +249,12 @@ export async function pullLatest(
         return { success: true, message: pullOutput.trim(), updated }
       } catch (pullError) {
         // Pull failed - restore stash
-        if (hasStash) {
-          await execAsync(`git -C "${repoPath}" stash pop`, { timeout: 10000 }).catch(() => {})
-        }
+        await execAsync(`git -C "${repoPath}" stash pop`, { timeout: 10000 }).catch(() => {})
         throw pullError
       }
     }
 
     // No local changes - simple pull
-    const pullCmd = branch
-      ? `git -C "${repoPath}" pull origin "${branch}"`
-      : `git -C "${repoPath}" pull`
     const { stdout: pullOutput } = await execAsync(pullCmd, { timeout: 120000 })
 
     const updated = !pullOutput.includes('Already up to date')
