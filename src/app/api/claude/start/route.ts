@@ -39,6 +39,19 @@ export async function POST(request: NextRequest) {
   let planId: string | null = null
   let gitSyncResult: { success: boolean; message?: string; error?: string; updated?: boolean } | null = null
 
+  // 在 cwd 上执行 git pull（不依赖 project.localPath）
+  try {
+    console.log(`[git-sync] Pulling latest at ${cwd}`)
+    gitSyncResult = await pullLatest(cwd)
+    if (gitSyncResult.success) {
+      console.log(`[git-sync] Success: ${gitSyncResult.message}, updated: ${gitSyncResult.updated}`)
+    } else {
+      console.warn(`[git-sync] Failed: ${gitSyncResult.error}`)
+    }
+  } catch (err) {
+    console.warn(`[git-sync] Error: ${err}`)
+  }
+
   if (projectId) {
     try {
       // 验证项目存在
@@ -46,17 +59,6 @@ export async function POST(request: NextRequest) {
         where: { id: projectId }
       })
       if (project) {
-        // 在创建 Plan 之前，先同步 git 代码
-        if (project.localPath) {
-          console.log(`[git-sync] Pulling latest for project ${projectId} at ${project.localPath}`)
-          gitSyncResult = await pullLatest(project.localPath)
-          if (gitSyncResult.success) {
-            console.log(`[git-sync] Success: ${gitSyncResult.message}, updated: ${gitSyncResult.updated}`)
-          } else {
-            console.warn(`[git-sync] Failed: ${gitSyncResult.error}`)
-          }
-        }
-
         // 创建新的 Plan
         const plan = await prisma.plan.create({
           data: {
