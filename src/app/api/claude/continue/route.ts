@@ -116,11 +116,9 @@ export async function POST(request: NextRequest) {
             if (planId) {
               event.data.planId = planId
             }
-            // 将 result 内容添加到 assistantContent，包含 Plan Complete 标记
-            // 这样数据库保存的消息与前端显示一致，刷新后可以正确恢复 Extract Tasks 按钮
-            if (event.data?.content) {
-              assistantContent += '\n\n---\n**Plan Complete**\n' + event.data.content
-            }
+            // 只添加 Plan Complete 标记，不添加 content（已在 text 事件中累积）
+            // 避免数据库中保存重复内容
+            assistantContent += '\n\n---\n**Plan Complete**'
           }
 
           const data = `data: ${JSON.stringify(event)}\n\n`

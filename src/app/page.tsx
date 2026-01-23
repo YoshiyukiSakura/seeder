@@ -542,8 +542,10 @@ function HomeContent() {
                 break
 
               case 'result':
+                // 只追加 Plan Complete 标记，不追加 content
+                // content 已通过 text 事件流式传输，追加会导致重复
+                updateLastAssistantMessage('\n\n---\n**Plan Complete**')
                 if (event.data.content) {
-                  updateLastAssistantMessage('\n\n---\n**Plan Complete**\n' + event.data.content)
                   // 保存计划内容，用于手动提取任务
                   setResultContent(event.data.content)
                 }
