@@ -450,6 +450,12 @@ function HomeContent() {
     let receivedSessionId: string | null = null  // 本地追踪 sessionId
 
     if (isInitial) {
+      // 清除问题提交状态，避免问题区块与新消息顺序冲突
+      // 必须在添加新 assistant 消息之前清除，否则问题区块会显示在新消息之后
+      setIsSubmittingAnswer(false)
+      setPendingQuestion(null)
+      setSelectedAnswers({})
+
       addMessage('assistant', '')
       // 初始化进度状态
       setProgressState({
