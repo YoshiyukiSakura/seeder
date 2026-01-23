@@ -38,54 +38,69 @@ export async function POST(request: NextRequest) {
 
   const cwd = projectPath || process.cwd()
 
-  // 如果有 projectId，创建 Plan 并保存对话
+  // 始终创建 Plan（支持 orphan plans），如果有 projectId 则关联
   let planId: string | null = null
+  let validatedProjectId: string | null = null
   let gitSyncResult: { success: boolean; message?: string; error?: string; updated?: boolean } | null = null
 
   // 在 cwd 上执行 git pull（不依赖 project.localPath）
-  try {
-    console.log(`[git-sync] Pulling latest at ${cwd}`)
-    gitSyncResult = await pullLatest(cwd)
-    if (gitSyncResult.success) {
-      console.log(`[git-sync] Success: ${gitSyncResult.message}, updated: ${gitSyncResult.updated}`)
-    } else {
-      console.warn(`[git-sync] Failed: ${gitSyncResult.error}`)
+  // 跳过对当前 dev server 目录的 git-sync，避免触发 Next.js Fast Refresh
+  const serverCwd = process.cwd()
+  if (cwd !== serverCwd) {
+    try {
+      console.log(`[git-sync] Pulling latest at ${cwd}`)
+      gitSyncResult = await pullLatest(cwd)
+      if (gitSyncResult.success) {
+        console.log(`[git-sync] Success: ${gitSyncResult.message}, updated: ${gitSyncResult.updated}`)
+      } else {
+        console.warn(`[git-sync] Failed: ${gitSyncResult.error}`)
+      }
+    } catch (err) {
+      console.warn(`[git-sync] Error: ${err}`)
     }
-  } catch (err) {
-    console.warn(`[git-sync] Error: ${err}`)
+  } else {
+    console.log(`[git-sync] Skipped for dev server directory: ${cwd}`)
   }
 
+  // 如果有 projectId，验证项目存在
   if (projectId) {
     try {
-      // 验证项目存在
       const project = await prisma.project.findUnique({
         where: { id: projectId }
       })
       if (project) {
-        // 创建新的 Plan
-        const plan = await prisma.plan.create({
-          data: {
-            projectId,
-            name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
-            description: prompt,
-            status: 'DRAFT'
-          }
-        })
-        planId = plan.id
-
-        // 保存用户消息
-        await prisma.conversation.create({
-          data: {
-            planId,
-            role: 'user',
-            content: prompt
-          }
-        })
+        validatedProjectId = projectId
+      } else {
+        console.warn(`Project not found: ${projectId}`)
       }
     } catch (dbError) {
-      console.error('Database error creating plan:', dbError)
-      // 继续执行，只是不保存对话
+      console.error('Database error validating project:', dbError)
     }
+  }
+
+  // 始终创建 Plan（projectId 可以是 null，支持 orphan plans）
+  try {
+    const plan = await prisma.plan.create({
+      data: {
+        projectId: validatedProjectId,  // null 表示 orphan plan
+        name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
+        description: prompt,
+        status: 'DRAFT'
+      }
+    })
+    planId = plan.id
+
+    // 保存用户消息
+    await prisma.conversation.create({
+      data: {
+        planId,
+        role: 'user',
+        content: prompt
+      }
+    })
+  } catch (dbError) {
+    console.error('Database error creating plan:', dbError)
+    // 继续执行，只是不保存对话
   }
 
   const encoder = new TextEncoder()

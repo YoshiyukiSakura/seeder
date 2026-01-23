@@ -93,7 +93,7 @@ export function TaskList({ tasks, onTasksReorder, onTaskUpdate, onTaskDelete, lo
 
   return (
     <>
-      <div className="w-96 flex flex-col bg-gray-850">
+      <div className="w-96 h-full flex flex-col bg-gray-850 overflow-hidden">
         {/* Header */}
         <header className="p-4 border-b border-gray-700">
           <div className="flex items-center justify-between">

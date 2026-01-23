@@ -69,7 +69,7 @@ model MasterPlan {
 
 model Plan {
   id              String         @id @default(cuid())
-  projectId       String
+  projectId       String?        // 可空，支持 orphan plans（从空白开始的对话）
   name            String
   description     String?
   summary         String?        // LLM生成的计划摘要（发布时自动生成）
@@ -86,7 +86,7 @@ model Plan {
   sortOrder       Int           @default(0)  // 在主计划中的排序
 
   conversations   Conversation[]
-  project         Project        @relation(fields: [projectId], references: [id])
+  project         Project?       @relation(fields: [projectId], references: [id])
   masterPlan      MasterPlan?    @relation(fields: [masterPlanId], references: [id], onDelete: SetNull)
   tasks           Task[]
   executions      Execution[]

@@ -16,6 +16,7 @@ import {
 } from '@/lib/conversation-storage'
 import { convertConversationToMessage, type Message } from '@/lib/conversation-utils'
 import { PlanHistoryPanel } from '@/components/PlanHistoryPanel'
+import { ProjectCreatorDialog } from '@/components/ProjectCreatorDialog'
 import { apiFetch } from '@/lib/basePath'
 
 interface Question {
@@ -80,6 +81,7 @@ function HomeContent() {
   } | null>(null)  // 上传进度状态
   const [isDragging, setIsDragging] = useState(false)  // 拖放状态
   const [loadedProjects, setLoadedProjects] = useState<Project[]>([])  // 已加载的项目列表
+  const [showProjectCreator, setShowProjectCreator] = useState(false)  // 项目创建弹窗状态
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentPlanIdRef = useRef<string | null>(null)  // 用于跟踪当前正在处理的会话，避免重复恢复
@@ -87,6 +89,8 @@ function HomeContent() {
 
   // 判断是否是数据库项目（可以保存对话）
   const isDatabaseProject = selectedProject && selectedProject.source === 'database'
+  // 判断是否是 fresh 模式（从空白开始的对话）
+  const isFreshMode = selectedProject?.source === 'fresh'
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -230,12 +234,33 @@ function HomeContent() {
   const handleSelectProject = useCallback((project: Project | null) => {
     setSelectedProject(project)
     setResultContent('')  // 清空结果内容，防止切换项目后 Extract Tasks 使用错误的数据
+
+    // 如果选择的是 "Start Fresh"，自动清空对话状态开始新对话
+    if (project?.source === 'fresh') {
+      setMessages([])
+      setSessionId(null)
+      setPlanId(null)
+      currentPlanIdRef.current = null
+      setTasks([])
+      setPendingQuestion(null)
+      setSelectedAnswers({})
+      setProgressState({ sessionStartTime: null, tools: [], currentToolId: null })
+      setState('idle')
+      setPlanStatus('DRAFT')
+      setPlanName('')
+      setPlanDescription('')
+      router.replace('/', { scroll: false })
+      // 不保存 fresh 项目到 localStorage
+      clearSelectedProjectId()
+      return
+    }
+
     if (project) {
       saveSelectedProjectId(project.id)
     } else {
       clearSelectedProjectId()
     }
-  }, [])
+  }, [router])
 
   // 恢复对话：优先 URL 参数，其次 localStorage
   useEffect(() => {
@@ -916,6 +941,17 @@ function HomeContent() {
     }
   }
 
+  // 处理项目创建成功
+  const handleProjectCreated = useCallback((project: Project) => {
+    // 更新选中的项目为新创建的项目
+    setSelectedProject(project)
+    saveSelectedProjectId(project.id)
+    // 关闭对话框
+    setShowProjectCreator(false)
+    // 刷新历史列表
+    setHistoryRefreshTrigger(prev => prev + 1)
+  }, [])
+
   // 选择历史对话
   const handleSelectPlan = async (selectedPlanId: string) => {
     if (selectedPlanId === planId) return
@@ -1339,6 +1375,16 @@ function HomeContent() {
                   </svg>
                   Conversation will be saved
                 </span>
+              ) : isFreshMode && planId ? (
+                <button
+                  onClick={() => setShowProjectCreator(true)}
+                  className="text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create Project from Conversation
+                </button>
               ) : (
                 <span className="text-yellow-500 flex items-center gap-1">
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -1354,7 +1400,7 @@ function HomeContent() {
       </div>
 
       {/* Right Panel - Tasks */}
-      <div className={`flex flex-col bg-gray-850 ${viewMode === 'canvas' ? 'flex-1' : ''}`}>
+      <div className={`flex flex-col bg-gray-850 h-full overflow-hidden ${viewMode === 'canvas' ? 'flex-1' : ''}`}>
         {/* View Mode Toggle */}
         {tasks.length > 0 && (
           <div className="p-2 border-b border-gray-700 flex justify-center gap-1 shrink-0">
@@ -1419,6 +1465,15 @@ function HomeContent() {
           </div>
         )}
       </div>
+
+      {/* Project Creator Dialog */}
+      <ProjectCreatorDialog
+        isOpen={showProjectCreator}
+        onClose={() => setShowProjectCreator(false)}
+        onSuccess={handleProjectCreated}
+        planId={planId}
+        conversationContent={messages.map(m => `${m.role}: ${m.content}`).join('\n\n')}
+      />
     </div>
   )
 }

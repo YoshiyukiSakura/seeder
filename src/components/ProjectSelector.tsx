@@ -11,7 +11,7 @@ export interface Project {
   path?: string        // 本地项目路径
   description?: string
   techStack: string[]
-  source: 'database' | 'local'
+  source: 'database' | 'local' | 'fresh'  // 'fresh' 表示从空白开始
   hasGit?: boolean
 }
 
@@ -255,6 +255,9 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
           {selectedProject ? (
             <div className="flex items-center gap-2">
               <span className="text-white truncate">{selectedProject.name}</span>
+              {selectedProject.source === 'fresh' && (
+                <span className="text-xs px-1.5 py-0.5 bg-purple-900 text-purple-300 rounded">New Idea</span>
+              )}
               {selectedProject.source === 'local' && (
                 <span className="text-xs px-1.5 py-0.5 bg-green-900 text-green-300 rounded">Local</span>
               )}
@@ -308,6 +311,23 @@ export function ProjectSelector({ onSelect, selectedProject, className = '', onP
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoFocus
             />
+          </div>
+
+          {/* Start Fresh 选项 */}
+          <div className="px-3 py-2 border-b border-gray-700 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => handleSelect({ id: 'fresh', name: 'Start Fresh', source: 'fresh', techStack: [] })}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20
+                         border border-purple-500/50 hover:border-purple-400 rounded-lg text-purple-300
+                         hover:text-purple-200 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span className="font-medium">Start Fresh</span>
+              <span className="text-xs text-gray-500 ml-auto">New Idea</span>
+            </button>
           </div>
 
           {/* 项目列表 */}
