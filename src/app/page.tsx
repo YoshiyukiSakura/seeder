@@ -941,6 +941,42 @@ function HomeContent() {
     }
   }
 
+  // Re-publish Plan (创建可编辑副本)
+  const handleRePublish = async () => {
+    if (!planId) return
+
+    try {
+      const res = await apiFetch(`/api/plans/${planId}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (res.ok) {
+        const { plan: newPlan } = await res.json()
+
+        // 切换到新 Plan
+        setPlanId(newPlan.id)
+        currentPlanIdRef.current = newPlan.id
+        setPlanStatus('DRAFT')
+        setPlanName(newPlan.name)
+        setPlanDescription(newPlan.description || '')
+        setSessionId(null)  // 清空 sessionId，可以开始新对话
+        setMessages([])  // 清空消息（新 Plan 没有 conversations）
+        setTasks(newPlan.tasks || [])  // 加载复制的 tasks
+
+        // 刷新历史列表
+        setHistoryRefreshTrigger(prev => prev + 1)
+
+        // 更新 URL
+        router.replace(`/?planId=${newPlan.id}`, { scroll: false })
+      } else {
+        console.error('Failed to clone plan')
+      }
+    } catch (error) {
+      console.error('Re-publish error:', error)
+    }
+  }
+
   // 处理项目创建成功
   const handleProjectCreated = useCallback((project: Project) => {
     // 更新选中的项目为新创建的项目
@@ -1449,6 +1485,7 @@ function HomeContent() {
             planId={planId}
             planStatus={planStatus}
             onPublish={handlePublish}
+            onRePublish={planStatus === 'PUBLISHED' ? handleRePublish : undefined}
             planName={planName}
             planDescription={planDescription}
           />
