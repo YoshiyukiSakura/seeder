@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { runClaude } from '@/lib/claude'
 import { createSSEError, encodeSSEEvent } from '@/lib/sse-types'
 import { prisma } from '@/lib/prisma'
+import { DbNull } from '@/generated/prisma/internal/prismaNamespace'
 import { pullLatest } from '@/lib/git-utils'
 
 export async function POST(request: NextRequest) {
@@ -176,6 +177,11 @@ export async function POST(request: NextRequest) {
             // 在 result 事件中添加 planId
             if (planId) {
               event.data.planId = planId
+              // 计划完成时清除 pendingQuestion，避免刷新页面后重复显示问题
+              prisma.plan.update({
+                where: { id: planId },
+                data: { pendingQuestion: DbNull }
+              }).catch(err => console.error('Failed to clear pendingQuestion on result:', err))
             }
             // 只添加 Plan Complete 标记，不添加 content（已在 text 事件中累积）
             // 避免数据库中保存重复内容

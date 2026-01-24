@@ -115,6 +115,11 @@ export async function POST(request: NextRequest) {
           if (event.type === 'result') {
             if (planId) {
               event.data.planId = planId
+              // 计划完成时清除 pendingQuestion，避免刷新页面后重复显示问题
+              prisma.plan.update({
+                where: { id: planId },
+                data: { pendingQuestion: DbNull }
+              }).catch(err => console.error('Failed to clear pendingQuestion on result:', err))
             }
             // 只添加 Plan Complete 标记，不添加 content（已在 text 事件中累积）
             // 避免数据库中保存重复内容
