@@ -194,10 +194,11 @@ enum PRStatus {
 
 // Merge 状态（用于追踪 Issue 级别的合并状态）
 enum MergeStatus {
-  NOT_MERGED    // 未合并
-  MERGING       // 合并中
-  MERGED        // 已合并
-  CONFLICT      // 合并冲突
+  NOT_MERGED     // 未合并
+  MERGING        // 合并中
+  MERGED         // 已合并
+  AUTO_RESOLVED  // 自动解决冲突后合并
+  CONFLICT       // 合并冲突
 }
 
 // ==================== Farmer Models ====================
