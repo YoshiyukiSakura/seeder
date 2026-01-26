@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       let assistantContent = ''
       let claudeSessionId: string | null = null
+      let hasQuestion = false  // 追踪是否有问题事件
 
       // 发送 git 同步结果事件（如果有）
       if (gitSyncResult) {
@@ -146,26 +147,29 @@ export async function POST(request: NextRequest) {
 
           // 当收到 question 事件时，立即保存已收集的 assistant 消息和问题数据到数据库
           // 避免用户刷新页面时丢失消息和问题弹窗
-          if (event.type === 'question' && planId) {
-            // 保存 assistant 消息
-            if (assistantContent) {
-              prisma.conversation.create({
-                data: {
-                  planId,
-                  role: 'assistant',
-                  content: assistantContent
-                }
-              }).catch(err => console.error('Failed to save assistant message early:', err))
-              // 标记已保存，避免重复保存
-              assistantContent = ''
-            }
+          if (event.type === 'question') {
+            hasQuestion = true
+            if (planId) {
+              // 保存 assistant 消息
+              if (assistantContent) {
+                prisma.conversation.create({
+                  data: {
+                    planId,
+                    role: 'assistant',
+                    content: assistantContent
+                  }
+                }).catch(err => console.error('Failed to save assistant message early:', err))
+                // 标记已保存，避免重复保存
+                assistantContent = ''
+              }
 
-            // 保存 pendingQuestion 数据，刷新页面后可以恢复问题弹窗
-            if (event.data?.questions?.length > 0) {
-              prisma.plan.update({
-                where: { id: planId },
-                data: { pendingQuestion: event.data }
-              }).catch(err => console.error('Failed to save pendingQuestion:', err))
+              // 保存 pendingQuestion 数据，刷新页面后可以恢复问题弹窗
+              if (event.data?.questions?.length > 0) {
+                prisma.plan.update({
+                  where: { id: planId },
+                  data: { pendingQuestion: event.data }
+                }).catch(err => console.error('Failed to save pendingQuestion:', err))
+              }
             }
           }
 
@@ -183,13 +187,16 @@ export async function POST(request: NextRequest) {
                 data: { pendingQuestion: DbNull }
               }).catch(err => console.error('Failed to clear pendingQuestion on result:', err))
             }
-            // 只添加 Plan Complete 标记，不添加 content（已在 text 事件中累积）
-            // 避免数据库中保存重复内容
-            assistantContent += '\n\n---\n**Plan Complete**'
+            // 注意：Plan Complete 标记在流处理完毕后添加，见下方
           }
 
           const data = `data: ${JSON.stringify(event)}\n\n`
           controller.enqueue(encoder.encode(data))
+        }
+
+        // 在流处理完毕后，如果没有问题事件，添加 Plan Complete 标记
+        if (!hasQuestion) {
+          assistantContent += '\n\n---\n**Plan Complete**'
         }
 
         // 保存助手消息和 sessionId 到数据库

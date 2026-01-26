@@ -473,6 +473,7 @@ function HomeContent() {
     let buffer = ''
     let hasQuestion = false
     let receivedSessionId: string | null = null  // 本地追踪 sessionId
+    let resultReceived = false  // 追踪是否收到 result 事件，用于延迟添加 Plan Complete 标记
 
     if (isInitial) {
       // 清除问题提交状态，避免问题区块与新消息顺序冲突
@@ -567,9 +568,9 @@ function HomeContent() {
                 break
 
               case 'result':
-                // 只追加 Plan Complete 标记，不追加 content
-                // content 已通过 text 事件流式传输，追加会导致重复
-                updateLastAssistantMessage('\n\n---\n**Plan Complete**')
+                // 标记收到 result 事件，延迟到流处理完毕后再添加 Plan Complete 标记
+                // 这样可以避免标记出现在消息中间（因为 result 后可能还有 text 事件）
+                resultReceived = true
                 if (event.data.content) {
                   // 保存计划内容，用于手动提取任务
                   setResultContent(event.data.content)
@@ -610,6 +611,12 @@ function HomeContent() {
       } catch {
         // 忽略取消错误
       }
+    }
+
+    // 在流处理完毕后，如果收到了 result 且没有新问题，添加 Plan Complete 标记
+    // 这样可以确保标记出现在响应的最后，而不是中间
+    if (resultReceived && !hasQuestion) {
+      updateLastAssistantMessage('\n\n---\n**Plan Complete**')
     }
 
     if (!hasQuestion) {
@@ -961,7 +968,6 @@ function HomeContent() {
         setPlanName(newPlan.name)
         setPlanDescription(newPlan.description || '')
         setSessionId(null)  // 清空 sessionId，可以开始新对话
-        setMessages([])  // 清空消息（新 Plan 没有 conversations）
         setTasks(newPlan.tasks || [])  // 加载复制的 tasks
 
         // 刷新历史列表
