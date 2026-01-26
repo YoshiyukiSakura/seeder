@@ -377,6 +377,16 @@ model WorktreeLock {
   @@index([expiresAt])
 }
 
+// GitHub Token 映射表，存储 SSH 别名与 GitHub PAT 的对应关系
+model GitHubToken {
+  id          String   @id @default(cuid())
+  sshHost     String   @unique  // SSH 别名，如 "github-hanwen"
+  token       String            // GitHub PAT
+  description String?           // 可选描述，如 "hanwencheng的账号"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // ==================== Reviewer Enums ====================
 
 enum ReviewStatus {
