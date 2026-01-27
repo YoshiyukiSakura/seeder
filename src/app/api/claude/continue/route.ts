@@ -3,6 +3,7 @@ import { runClaude } from '@/lib/claude'
 import { createSSEError, encodeSSEEvent } from '@/lib/sse-types'
 import { prisma } from '@/lib/prisma'
 import { DbNull } from '@/generated/prisma/internal/prismaNamespace'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   // 获取请求的 abort signal
@@ -50,6 +51,10 @@ export async function POST(request: NextRequest) {
 
   const cwd = projectPath || process.cwd()
 
+  // 获取当前用户
+  const user = await getCurrentUser(request)
+  const userId = user?.id || null
+
   // 保存用户回答到数据库，并清除 pendingQuestion（用户已回答）
   if (planId) {
     try {
@@ -57,7 +62,8 @@ export async function POST(request: NextRequest) {
         data: {
           planId,
           role: 'user',
-          content: answer
+          content: answer,
+          userId  // 保存发送者
         }
       })
       // 清除 pendingQuestion，因为用户已经回答

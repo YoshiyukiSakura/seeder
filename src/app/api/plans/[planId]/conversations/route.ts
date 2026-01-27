@@ -42,6 +42,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const conversations = await prisma.conversation.findMany({
       where: { planId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            slackUsername: true,
+            avatarUrl: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     })
 
@@ -87,6 +96,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             role: msg.role,
             content: msg.content,
             metadata: msg.metadata ?? undefined,
+            userId: msg.role === 'user' ? user.id : undefined,
           },
         })
       })

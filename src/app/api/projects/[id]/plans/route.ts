@@ -38,6 +38,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         _count: {
           select: { tasks: true, conversations: true },
         },
+        creator: {
+          select: {
+            id: true,
+            slackUsername: true,
+            avatarUrl: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })

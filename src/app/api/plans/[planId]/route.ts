@@ -63,6 +63,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         conversations: {
           orderBy: { createdAt: 'asc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                slackUsername: true,
+                avatarUrl: true,
+              },
+            },
+          },
         },
       },
     })
@@ -87,6 +96,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       conversations: plan.conversations.map((conversation) => ({
         ...conversation,
         content: sanitizeText(conversation.content) ?? conversation.content,
+        user: conversation.user,
       })),
     }
 

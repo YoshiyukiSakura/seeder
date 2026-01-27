@@ -1153,34 +1153,64 @@ function HomeContent() {
               key={msg.id}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div
-                className={`max-w-[80%] rounded-lg p-3 ${
-                  msg.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : msg.role === 'system'
-                    ? 'bg-red-900 text-red-200'
-                    : 'bg-gray-700 text-gray-100'
-                }`}
-              >
-                {msg.imagePaths && msg.imagePaths.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {msg.imagePaths.map((path, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-black/20 rounded text-xs"
-                        title={path}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {path.split('/').pop()}
-                      </span>
-                    ))}
+              <div className={`flex items-start gap-2 max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                {/* User avatar for user messages */}
+                {msg.role === 'user' && msg.user && (
+                  msg.user.avatarUrl ? (
+                    <img
+                      src={msg.user.avatarUrl}
+                      alt={msg.user.slackUsername}
+                      className="w-8 h-8 rounded-full flex-shrink-0"
+                      title={msg.user.slackUsername}
+                    />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center flex-shrink-0 text-sm text-white"
+                      title={msg.user.slackUsername}
+                    >
+                      {msg.user.slackUsername.charAt(0).toUpperCase()}
+                    </div>
+                  )
+                )}
+
+                <div>
+                  {/* Username for user messages */}
+                  {msg.role === 'user' && msg.user && (
+                    <p className="text-xs text-gray-400 mb-1 text-right">
+                      {msg.user.slackUsername}
+                    </p>
+                  )}
+
+                  <div
+                    className={`rounded-lg p-3 ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : msg.role === 'system'
+                        ? 'bg-red-900 text-red-200'
+                        : 'bg-gray-700 text-gray-100'
+                    }`}
+                  >
+                    {msg.imagePaths && msg.imagePaths.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {msg.imagePaths.map((path, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-black/20 rounded text-xs"
+                            title={path}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {path.split('/').pop()}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {msg.content && (
+                      <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
+                    )}
                   </div>
-                )}
-                {msg.content && (
-                  <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
-                )}
+                </div>
               </div>
             </div>
           ))}

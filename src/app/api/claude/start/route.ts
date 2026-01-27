@@ -4,6 +4,7 @@ import { createSSEError, encodeSSEEvent } from '@/lib/sse-types'
 import { prisma } from '@/lib/prisma'
 import { DbNull } from '@/generated/prisma/internal/prismaNamespace'
 import { pullLatest } from '@/lib/git-utils'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   // 获取请求的 abort signal
@@ -38,6 +39,10 @@ export async function POST(request: NextRequest) {
   }
 
   const cwd = projectPath || process.cwd()
+
+  // 获取当前用户
+  const user = await getCurrentUser(request)
+  const userId = user?.id || null
 
   // 始终创建 Plan（支持 orphan plans），如果有 projectId 则关联
   let planId: string | null = null
@@ -86,7 +91,8 @@ export async function POST(request: NextRequest) {
         projectId: validatedProjectId,  // null 表示 orphan plan
         name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
         description: prompt,
-        status: 'DRAFT'
+        status: 'DRAFT',
+        creatorId: userId  // 保存创建者
       }
     })
     planId = plan.id
@@ -96,7 +102,8 @@ export async function POST(request: NextRequest) {
       data: {
         planId,
         role: 'user',
-        content: prompt
+        content: prompt,
+        userId  // 保存发送者
       }
     })
   } catch (dbError) {

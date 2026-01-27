@@ -3,6 +3,12 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '@/lib/basePath'
 
+interface PlanCreator {
+  id: string
+  slackUsername: string
+  avatarUrl: string | null
+}
+
 interface PlanListItem {
   id: string
   name: string
@@ -14,6 +20,7 @@ interface PlanListItem {
     tasks: number
     conversations: number
   }
+  creator?: PlanCreator | null
 }
 
 interface Props {
@@ -129,10 +136,24 @@ export function PlanHistoryPanel({
               }`}
             >
               <div className="flex items-start gap-2">
-                {/* Active indicator */}
-                <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
-                  isActive ? 'bg-blue-500' : 'bg-transparent'
-                }`} />
+                {/* Creator avatar */}
+                {plan.creator ? (
+                  plan.creator.avatarUrl ? (
+                    <img
+                      src={plan.creator.avatarUrl}
+                      alt={plan.creator.slackUsername}
+                      className="w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-xs text-gray-300">
+                      {plan.creator.slackUsername.charAt(0).toUpperCase()}
+                    </div>
+                  )
+                ) : (
+                  <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                    isActive ? 'bg-blue-500' : 'bg-transparent'
+                  }`} />
+                )}
 
                 <div className="flex-1 min-w-0">
                   {/* Plan name */}
@@ -144,6 +165,12 @@ export function PlanHistoryPanel({
 
                   {/* Meta info */}
                   <p className="text-xs text-gray-500 mt-1 flex items-center gap-2">
+                    {plan.creator && (
+                      <>
+                        <span className="text-gray-400">{plan.creator.slackUsername}</span>
+                        <span>·</span>
+                      </>
+                    )}
                     <span>{plan._count.conversations} msgs</span>
                     <span>·</span>
                     <span>{formatRelativeTime(plan.updatedAt)}</span>

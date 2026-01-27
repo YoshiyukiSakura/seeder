@@ -9,15 +9,17 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  slackUserId   String    @unique
+  id            String         @id @default(cuid())
+  slackUserId   String         @unique
   slackUsername String
   slackTeamId   String?
   email         String?
   avatarUrl     String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   projects      Project[]
+  createdPlans  Plan[]         @relation("PlanCreator")
+  conversations Conversation[]
 }
 
 model LoginToken {
@@ -85,6 +87,10 @@ model Plan {
   blockedByPlanIds String[]     @default([]) // Plan间依赖关系
   sortOrder       Int           @default(0)  // 在主计划中的排序
 
+  // 创建者追踪
+  creatorId       String?
+  creator         User?          @relation("PlanCreator", fields: [creatorId], references: [id])
+
   conversations   Conversation[]
   project         Project?       @relation(fields: [projectId], references: [id])
   masterPlan      MasterPlan?    @relation(fields: [masterPlanId], references: [id], onDelete: SetNull)
@@ -93,6 +99,7 @@ model Plan {
 
   @@index([projectId])
   @@index([masterPlanId])
+  @@index([creatorId])
 }
 
 model Task {
@@ -129,7 +136,12 @@ model Conversation {
   createdAt DateTime @default(now())
   plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
 
+  // 消息发送者追踪（仅 role='user' 时有意义）
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+
   @@index([planId])
+  @@index([userId])
 }
 
 enum PlanStatus {
