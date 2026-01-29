@@ -18,6 +18,7 @@ import { createGitHubRepo, isGitHubConfigured } from '@/lib/github'
 import { generateClaudeMd } from '@/lib/prompts/project-extraction'
 import * as path from 'path'
 import * as fs from 'fs/promises'
+import { homedir } from 'os'
 
 interface CreateFromConversationRequest {
   planId?: string
@@ -105,6 +106,23 @@ export async function POST(request: NextRequest) {
             hasExistingCode = true
             console.log(`[create-from-conversation] Migrated ${sourceFiles.length} items to ${localPath}`)
           }
+        }
+
+        // Migrate Claude CLI session data
+        // Claude stores sessions in ~/.claude/projects/{path-with-dashes}/
+        const claudeProjectsDir = path.join(homedir(), '.claude', 'projects')
+        const sourceSessionDir = path.join(claudeProjectsDir, sourcePath.replace(/\//g, '-'))
+        const targetSessionDir = path.join(claudeProjectsDir, localPath.replace(/\//g, '-'))
+
+        try {
+          const sessionDirStat = await fs.stat(sourceSessionDir)
+          if (sessionDirStat.isDirectory()) {
+            await fs.cp(sourceSessionDir, targetSessionDir, { recursive: true })
+            console.log(`[create-from-conversation] Migrated Claude session from ${sourceSessionDir} to ${targetSessionDir}`)
+          }
+        } catch {
+          // Session directory might not exist, that's okay
+          console.log(`[create-from-conversation] No Claude session to migrate from ${sourceSessionDir}`)
         }
       } catch (error) {
         console.error('[create-from-conversation] Failed to migrate code:', error)
