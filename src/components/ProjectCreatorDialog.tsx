@@ -333,19 +333,23 @@ export function ProjectCreatorDialog({
 
               {/* GitHub Toggle */}
               <div className="flex items-center gap-3 pt-2">
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className={`relative inline-flex items-center ${sourcePath ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                   <input
                     type="checkbox"
                     checked={createGitHub}
-                    onChange={(e) => setCreateGitHub(e.target.checked)}
+                    onChange={(e) => !sourcePath && setCreateGitHub(e.target.checked)}
+                    disabled={!!sourcePath}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  <div className={`w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600 ${sourcePath ? 'opacity-70' : ''}`}></div>
                 </label>
                 <div>
                   <span className="text-sm font-medium text-gray-300">Create GitHub Repository</span>
                   <p className="text-xs text-gray-500">
-                    Creates a private GitHub repository and links it to the local repo
+                    {sourcePath
+                      ? 'Required for Fresh Start projects (needed for downstream execution)'
+                      : 'Creates a private GitHub repository and links it to the local repo'
+                    }
                   </p>
                 </div>
               </div>

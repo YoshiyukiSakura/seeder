@@ -64,6 +64,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 })
     }
 
+    // Fresh Start 模式必须创建 GitHub 仓库（downstream farmer 需要 remote 来创建 worktree）
+    if (sourcePath && !createGitHub) {
+      return NextResponse.json(
+        { error: 'GitHub repository is required for Fresh Start projects' },
+        { status: 400 }
+      )
+    }
+
     // Generate safe directory name
     const safeName = generateSafeDirectoryName(name)
     if (!safeName) {
@@ -150,7 +158,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create GitHub repository (optional)
+    // Create GitHub repository
     let gitUrl: string | undefined
     let githubError: string | undefined
     if (createGitHub && isGitHubConfigured()) {
@@ -161,7 +169,14 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         githubError = error instanceof Error ? error.message : String(error)
         console.error('Failed to create GitHub repository:', githubError)
-        // Continue without GitHub - local repo will still be created
+        // Fresh Start 模式下 GitHub 创建失败是致命错误
+        if (sourcePath) {
+          return NextResponse.json(
+            { error: `GitHub repository is required but failed to create: ${githubError}` },
+            { status: 500 }
+          )
+        }
+        // 非 Fresh Start 模式可以继续（本地仓库仍然有效）
       }
     }
 
