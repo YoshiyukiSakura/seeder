@@ -106,13 +106,18 @@ export async function POST(request: NextRequest) {
         const sourceStat = await fs.stat(sourcePath)
         if (sourceStat.isDirectory()) {
           const sourceFiles = await fs.readdir(sourcePath)
-          if (sourceFiles.length > 0) {
+          // Filter out .git directory - we'll create a fresh git repo with proper remote
+          const codeFiles = sourceFiles.filter(f => f !== '.git')
+          if (codeFiles.length > 0) {
             // Create parent directory
             await fs.mkdir(path.dirname(localPath), { recursive: true })
-            // Copy files from temp directory to new project location
-            await fs.cp(sourcePath, localPath, { recursive: true })
+            // Copy files from temp directory to new project location (excluding .git)
+            await fs.cp(sourcePath, localPath, {
+              recursive: true,
+              filter: (src) => !src.includes('/.git') && !src.endsWith('.git')
+            })
             hasExistingCode = true
-            console.log(`[create-from-conversation] Migrated ${sourceFiles.length} items to ${localPath}`)
+            console.log(`[create-from-conversation] Migrated ${codeFiles.length} items to ${localPath} (excluding .git)`)
           }
         }
 
@@ -185,7 +190,7 @@ export async function POST(request: NextRequest) {
       remoteUrl: gitUrl,
       branch: 'main',
       claudeMdContent: finalClaudeMdContent,
-      skipExistingGit: hasExistingCode  // 如果有现有代码，跳过 git init
+      requireRemote: !!sourcePath  // Fresh Start 项目必须成功设置 remote
     })
 
     if (!initResult.success) {

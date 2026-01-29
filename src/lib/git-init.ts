@@ -11,6 +11,7 @@ export interface InitRepoOptions {
   claudeMdContent?: string
   gitignoreContent?: string
   skipExistingGit?: boolean  // 如果目录已有 .git，跳过初始化
+  requireRemote?: boolean    // 如果为 true，remote 设置失败会导致整体失败
 }
 
 export interface InitRepoResult {
@@ -65,7 +66,7 @@ export async function initializeLocalRepo(
   localPath: string,
   options: InitRepoOptions = {}
 ): Promise<InitRepoResult> {
-  const { remoteUrl, branch = 'main', claudeMdContent, gitignoreContent, skipExistingGit } = options
+  const { remoteUrl, branch = 'main', claudeMdContent, gitignoreContent, skipExistingGit, requireRemote } = options
 
   try {
     // Create directory if it doesn't exist
@@ -135,13 +136,34 @@ export async function initializeLocalRepo(
     let hasRemote = false
     if (remoteUrl) {
       try {
+        // Check if origin remote already exists
+        try {
+          await execAsync('git remote get-url origin', { cwd: localPath })
+          // Origin exists, remove it first
+          console.log('[initializeLocalRepo] Removing existing origin remote')
+          await execAsync('git remote remove origin', { cwd: localPath })
+        } catch {
+          // Origin doesn't exist, that's fine
+        }
+
+        // Add origin remote
         await execAsync(`git remote add origin "${remoteUrl}"`, { cwd: localPath })
+        console.log(`[initializeLocalRepo] Added origin remote: ${remoteUrl}`)
+
+        // Push to remote
         await execAsync(`git push -u origin ${branch}`, { cwd: localPath })
         hasRemote = true
+        console.log(`[initializeLocalRepo] Pushed to origin/${branch}`)
       } catch (pushError) {
-        // Remote setup failed, but local repo is still valid
         console.error('Failed to setup remote:', pushError)
-        // We don't fail the whole operation, just note the remote wasn't set up
+        if (requireRemote) {
+          // For Fresh Start projects, remote is required
+          return {
+            success: false,
+            error: `Failed to setup git remote: ${pushError instanceof Error ? pushError.message : String(pushError)}`
+          }
+        }
+        // Non-Fresh Start: remote setup failed, but local repo is still valid
       }
     }
 
