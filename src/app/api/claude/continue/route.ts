@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const { answer, projectPath, sessionId, planId, imagePaths } = body
+  const { answer, projectPath, sessionId: clientSessionId, planId, imagePaths } = body
 
   if (!answer) {
     const errorEvent = createSSEError(
@@ -35,6 +35,25 @@ export async function POST(request: NextRequest) {
       status: 400,
       headers: { 'Content-Type': 'text/event-stream' },
     })
+  }
+
+  // 优先从数据库获取 sessionId（避免前端缓存污染）
+  let sessionId = clientSessionId
+  if (planId) {
+    try {
+      const plan = await prisma.plan.findUnique({
+        where: { id: planId },
+        select: { sessionId: true }
+      })
+      if (plan?.sessionId) {
+        sessionId = plan.sessionId
+        if (sessionId !== clientSessionId) {
+          console.log(`[continue] Using sessionId from DB: ${sessionId} (client sent: ${clientSessionId})`)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to get sessionId from plan:', err)
+    }
   }
 
   if (!sessionId) {
