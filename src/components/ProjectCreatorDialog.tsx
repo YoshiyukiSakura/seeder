@@ -24,6 +24,7 @@ interface ProjectCreatorDialogProps {
   onSuccess: (project: Project) => void
   planId: string | null
   conversationContent: string
+  sourcePath?: string | null  // Start Fresh 模式下 Claude 工作的临时目录
 }
 
 export function ProjectCreatorDialog({
@@ -31,7 +32,8 @@ export function ProjectCreatorDialog({
   onClose,
   onSuccess,
   planId,
-  conversationContent
+  conversationContent,
+  sourcePath
 }: ProjectCreatorDialogProps) {
   const [loading, setLoading] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -132,7 +134,8 @@ export function ProjectCreatorDialog({
           techStack,
           createGitHub,
           conventions,
-          keyFeatures
+          keyFeatures,
+          sourcePath  // 传递 Start Fresh 的临时目录，用于迁移代码
         })
       })
 

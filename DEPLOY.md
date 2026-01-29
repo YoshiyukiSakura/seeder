@@ -5,7 +5,7 @@
 - **URL**: https://copilot.wildmeta.ai/seeder
 - **服务器**: ubuntu@15.235.212.36
 - **应用目录**: /home/ubuntu/apps/seeder
-- **端口**: 38964
+- **端口**: 38966
 - **PM2 进程名**: seeder
 
 ## 部署方法

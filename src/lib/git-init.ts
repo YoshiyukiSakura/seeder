@@ -10,6 +10,7 @@ export interface InitRepoOptions {
   branch?: string
   claudeMdContent?: string
   gitignoreContent?: string
+  skipExistingGit?: boolean  // 如果目录已有 .git，跳过初始化
 }
 
 export interface InitRepoResult {
@@ -64,7 +65,7 @@ export async function initializeLocalRepo(
   localPath: string,
   options: InitRepoOptions = {}
 ): Promise<InitRepoResult> {
-  const { remoteUrl, branch = 'main', claudeMdContent, gitignoreContent } = options
+  const { remoteUrl, branch = 'main', claudeMdContent, gitignoreContent, skipExistingGit } = options
 
   try {
     // Create directory if it doesn't exist
@@ -72,36 +73,63 @@ export async function initializeLocalRepo(
 
     // Check if directory is not empty
     const files = await fs.readdir(localPath)
+    const isGitRepo = files.includes('.git')
+    let hasExistingCode = false
+
     if (files.length > 0) {
-      // Check if it's already a git repo
-      const isGitRepo = files.includes('.git')
       if (isGitRepo) {
-        return {
-          success: false,
-          error: 'Directory is already a git repository'
+        // Directory already has a git repo
+        if (skipExistingGit) {
+          console.log(`[initializeLocalRepo] Directory already has git repo, skipping init`)
+          hasExistingCode = true
+        } else {
+          return {
+            success: false,
+            error: 'Directory is already a git repository'
+          }
         }
+      } else {
+        // Non-empty directory without git
+        hasExistingCode = true
+        console.warn(`[initializeLocalRepo] Initializing git repo in non-empty directory: ${localPath}`)
       }
-      // For now, allow initializing in non-empty directories
-      // but warn in the logs
-      console.warn(`Initializing git repo in non-empty directory: ${localPath}`)
     }
 
-    // Initialize git repository
-    await execAsync(`git init -b ${branch}`, { cwd: localPath })
+    if (!hasExistingCode) {
+      // Fresh empty directory - initialize git
+      await execAsync(`git init -b ${branch}`, { cwd: localPath })
+    } else if (!isGitRepo) {
+      // Non-empty directory without git - initialize git
+      await execAsync(`git init -b ${branch}`, { cwd: localPath })
+    }
 
-    // Create CLAUDE.md if content provided
+    // Create/Update CLAUDE.md if content provided
     if (claudeMdContent) {
       const claudeMdPath = path.join(localPath, 'CLAUDE.md')
       await fs.writeFile(claudeMdPath, claudeMdContent, 'utf-8')
     }
 
-    // Create .gitignore
+    // Create/Update .gitignore
     const gitignorePath = path.join(localPath, '.gitignore')
-    await fs.writeFile(gitignorePath, gitignoreContent || DEFAULT_GITIGNORE, 'utf-8')
+    const existingIgnore = hasExistingCode && !isGitRepo ? null : await fs.readFile(gitignorePath, 'utf-8').catch(() => null)
+    if (!existingIgnore || existingIgnore === DEFAULT_GITIGNORE) {
+      await fs.writeFile(gitignorePath, gitignoreContent || DEFAULT_GITIGNORE, 'utf-8')
+    }
 
-    // Create initial commit
-    await execAsync('git add .', { cwd: localPath })
-    await execAsync('git commit -m "Initial commit with CLAUDE.md"', { cwd: localPath })
+    // Create commit (or amend if there are uncommitted changes)
+    try {
+      // Check if there are changes to commit
+      const status = await execAsync('git status --porcelain', { cwd: localPath })
+      if (status.stdout.trim()) {
+        await execAsync('git add .', { cwd: localPath })
+        await execAsync('git commit -m "Initial commit with CLAUDE.md"', { cwd: localPath })
+      } else {
+        console.log('[initializeLocalRepo] No changes to commit')
+      }
+    } catch (commitError) {
+      // Commit might fail if there's no content or author config issue
+      console.warn('[initializeLocalRepo] Failed to create commit:', commitError)
+    }
 
     // Add remote and push if URL provided
     let hasRemote = false

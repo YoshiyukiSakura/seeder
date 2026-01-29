@@ -82,6 +82,7 @@ function HomeContent() {
   const [isDragging, setIsDragging] = useState(false)  // 拖放状态
   const [loadedProjects, setLoadedProjects] = useState<Project[]>([])  // 已加载的项目列表
   const [showProjectCreator, setShowProjectCreator] = useState(false)  // 项目创建弹窗状态
+  const [tempCwd, setTempCwd] = useState<string | null>(null)  // Start Fresh 模式下 Claude 工作的临时目录
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentPlanIdRef = useRef<string | null>(null)  // 用于跟踪当前正在处理的会话，避免重复恢复
@@ -519,6 +520,16 @@ function HomeContent() {
                   receivedSessionId = event.data.sessionId
                   setSessionId(event.data.sessionId)
                 }
+                // 保存临时工作目录（Start Fresh 模式下）
+                if (event.data.cwd && isFreshMode) {
+                  setTempCwd(event.data.cwd)
+                }
+                break
+
+              case 'plan_created':
+                // planId 在对话开始时立即返回，不需要等 complete
+                setPlanId(event.data.planId)
+                currentPlanIdRef.current = event.data.planId
                 break
 
               case 'text':
@@ -1435,7 +1446,9 @@ function HomeContent() {
               </button>
             )}
           </div>
-          <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
+          <div
+            className="mt-2 text-xs text-gray-500 flex items-center justify-between"
+          >
             <span>
               Status: {state === 'idle' ? 'Ready' : state === 'processing' ? 'Processing' : state === 'waiting_input' ? 'Waiting for input' : 'Complete'}
             </span>
@@ -1450,9 +1463,9 @@ function HomeContent() {
               ) : isFreshMode && planId ? (
                 <button
                   onClick={() => setShowProjectCreator(true)}
-                  className="text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                   Create Project from Conversation
@@ -1546,6 +1559,7 @@ function HomeContent() {
         onSuccess={handleProjectCreated}
         planId={planId}
         conversationContent={messages.map(m => `${m.role}: ${m.content}`).join('\n\n')}
+        sourcePath={isFreshMode ? tempCwd : null}
       />
     </div>
   )

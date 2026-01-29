@@ -17,6 +17,7 @@ import { initializeLocalRepo, generateSafeDirectoryName } from '@/lib/git-init'
 import { createGitHubRepo, isGitHubConfigured } from '@/lib/github'
 import { generateClaudeMd } from '@/lib/prompts/project-extraction'
 import * as path from 'path'
+import * as fs from 'fs/promises'
 
 interface CreateFromConversationRequest {
   planId?: string
@@ -26,6 +27,7 @@ interface CreateFromConversationRequest {
   techStack: string[]
   createGitHub: boolean
   claudeMdContent?: string
+  sourcePath?: string  // Start Fresh 模式下 Claude 工作的临时目录
   conventions?: {
     language?: string
     framework?: string
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
       techStack,
       createGitHub,
       claudeMdContent,
+      sourcePath,
       conventions,
       keyFeatures
     } = body
@@ -85,6 +88,30 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Handle source code migration (Start Fresh mode)
+    let hasExistingCode = false
+    if (sourcePath) {
+      console.log(`[create-from-conversation] Migrating code from temp directory: ${sourcePath}`)
+      try {
+        // Check if source directory has files
+        const sourceStat = await fs.stat(sourcePath)
+        if (sourceStat.isDirectory()) {
+          const sourceFiles = await fs.readdir(sourcePath)
+          if (sourceFiles.length > 0) {
+            // Create parent directory
+            await fs.mkdir(path.dirname(localPath), { recursive: true })
+            // Copy files from temp directory to new project location
+            await fs.cp(sourcePath, localPath, { recursive: true })
+            hasExistingCode = true
+            console.log(`[create-from-conversation] Migrated ${sourceFiles.length} items to ${localPath}`)
+          }
+        }
+      } catch (error) {
+        console.error('[create-from-conversation] Failed to migrate code:', error)
+        // Continue without migrating - will create empty repo
+      }
+    }
+
     // Create GitHub repository (optional)
     let gitUrl: string | undefined
     let githubError: string | undefined
@@ -104,7 +131,8 @@ export async function POST(request: NextRequest) {
     const initResult = await initializeLocalRepo(localPath, {
       remoteUrl: gitUrl,
       branch: 'main',
-      claudeMdContent: finalClaudeMdContent
+      claudeMdContent: finalClaudeMdContent,
+      skipExistingGit: hasExistingCode  // 如果有现有代码，跳过 git init
     })
 
     if (!initResult.success) {

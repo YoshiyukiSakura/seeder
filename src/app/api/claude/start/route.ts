@@ -38,7 +38,23 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const cwd = projectPath || process.cwd()
+  // 确定工作目录：
+  // - 有 projectPath: 使用指定的项目路径
+  // - 有 projectId: 使用当前 Seeder 目录（正常项目）
+  // - 都没有（Start Fresh）: 使用临时空目录，确保 Claude 没有项目上下文
+  let cwd: string
+  if (projectPath) {
+    cwd = projectPath
+  } else if (projectId) {
+    cwd = process.cwd()
+  } else {
+    // Start Fresh 模式：创建临时空目录
+    const { mkdtempSync } = await import('fs')
+    const { join } = await import('path')
+    const { tmpdir } = await import('os')
+    cwd = mkdtempSync(join(tmpdir(), 'seedbed-fresh-'))
+    console.log(`[fresh-mode] Using temp directory: ${cwd}`)
+  }
 
   // 获取当前用户
   const user = await getCurrentUser(request)
@@ -50,9 +66,12 @@ export async function POST(request: NextRequest) {
   let gitSyncResult: { success: boolean; message?: string; error?: string; updated?: boolean } | null = null
 
   // 在 cwd 上执行 git pull（不依赖 project.localPath）
-  // 跳过对当前 dev server 目录的 git-sync，避免触发 Next.js Fast Refresh
+  // 跳过以下情况：
+  // 1. 当前 dev server 目录（避免触发 Next.js Fast Refresh）
+  // 2. Start Fresh 模式的临时目录（没有 git 仓库）
   const serverCwd = process.cwd()
-  if (cwd !== serverCwd) {
+  const isFreshMode = !projectPath && !projectId
+  if (cwd !== serverCwd && !isFreshMode) {
     try {
       console.log(`[git-sync] Pulling latest at ${cwd}`)
       gitSyncResult = await pullLatest(cwd)
@@ -65,7 +84,8 @@ export async function POST(request: NextRequest) {
       console.warn(`[git-sync] Error: ${err}`)
     }
   } else {
-    console.log(`[git-sync] Skipped for dev server directory: ${cwd}`)
+    const reason = isFreshMode ? 'fresh mode (temp directory)' : 'dev server directory'
+    console.log(`[git-sync] Skipped for ${reason}: ${cwd}`)
   }
 
   // 如果有 projectId，验证项目存在
@@ -85,6 +105,8 @@ export async function POST(request: NextRequest) {
   }
 
   // 始终创建 Plan（projectId 可以是 null，支持 orphan plans）
+  // 注意：即使数据库失败也生成 planId，确保前端功能正常工作
+  let localPlanId: string | null = null
   try {
     const plan = await prisma.plan.create({
       data: {
@@ -95,6 +117,7 @@ export async function POST(request: NextRequest) {
         creatorId: userId  // 保存创建者
       }
     })
+    localPlanId = plan.id
     planId = plan.id
 
     // 保存用户消息
@@ -108,7 +131,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (dbError) {
     console.error('Database error creating plan:', dbError)
-    // 继续执行，只是不保存对话
+    // 即使数据库失败，也生成一个本地 planId（不会保存到数据库）
+    localPlanId = `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    planId = localPlanId
   }
 
   const encoder = new TextEncoder()
@@ -125,6 +150,15 @@ export async function POST(request: NextRequest) {
           data: gitSyncResult
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(gitSyncEvent)}\n\n`))
+      }
+
+      // 立即发送 planId，让前端可以显示 "Create Project" 按钮
+      if (planId) {
+        const planIdEvent = {
+          type: 'plan_created',
+          data: { planId }
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(planIdEvent)}\n\n`))
       }
 
       try {
@@ -189,10 +223,13 @@ export async function POST(request: NextRequest) {
             if (planId) {
               event.data.planId = planId
               // 计划完成时清除 pendingQuestion，避免刷新页面后重复显示问题
-              prisma.plan.update({
-                where: { id: planId },
-                data: { pendingQuestion: DbNull }
-              }).catch(err => console.error('Failed to clear pendingQuestion on result:', err))
+              // 注意：只有真实的数据库 planId 才能更新，本地 planId（local-开头）跳过
+              if (!planId.startsWith('local-')) {
+                prisma.plan.update({
+                  where: { id: planId },
+                  data: { pendingQuestion: DbNull }
+                }).catch(err => console.error('Failed to clear pendingQuestion on result:', err))
+              }
             }
             // 注意：Plan Complete 标记在流处理完毕后添加，见下方
           }
@@ -209,20 +246,23 @@ export async function POST(request: NextRequest) {
         // 保存助手消息和 sessionId 到数据库
         if (planId && assistantContent) {
           try {
-            await prisma.conversation.create({
-              data: {
-                planId,
-                role: 'assistant',
-                content: assistantContent
-              }
-            })
-
-            // 更新 Plan 的 sessionId
-            if (claudeSessionId) {
-              await prisma.plan.update({
-                where: { id: planId },
-                data: { sessionId: claudeSessionId }
+            // 只有真实的数据库 planId 才保存
+            if (!planId.startsWith('local-')) {
+              await prisma.conversation.create({
+                data: {
+                  planId,
+                  role: 'assistant',
+                  content: assistantContent
+                }
               })
+
+              // 更新 Plan 的 sessionId
+              if (claudeSessionId) {
+                await prisma.plan.update({
+                  where: { id: planId },
+                  data: { sessionId: claudeSessionId }
+                })
+              }
             }
           } catch (dbError) {
             console.error('Database error saving conversation:', dbError)
