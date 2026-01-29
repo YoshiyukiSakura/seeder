@@ -35,3 +35,6 @@ Thumbs.db
 /src/generated/prisma
 tsconfig.tsbuildinfo
 .repos/
+
+# Planning artifacts
+planning/
