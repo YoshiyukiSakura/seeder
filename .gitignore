@@ -38,3 +38,6 @@ tsconfig.tsbuildinfo
 
 # Planning artifacts
 planning/
+
+# Cookie files
+cookies*.txt
