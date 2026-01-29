@@ -110,14 +110,34 @@ export async function POST(request: NextRequest) {
 
         // Migrate Claude CLI session data
         // Claude stores sessions in ~/.claude/projects/{path-with-dashes}/
+        // Claude CLI replaces both '/' and '.' with '-' in the directory name
+        // Session files also contain embedded cwd paths that need to be updated
         const claudeProjectsDir = path.join(homedir(), '.claude', 'projects')
-        const sourceSessionDir = path.join(claudeProjectsDir, sourcePath.replace(/\//g, '-'))
-        const targetSessionDir = path.join(claudeProjectsDir, localPath.replace(/\//g, '-'))
+        const pathToClaudeDir = (p: string) => p.replace(/[/.]/g, '-')
+        const sourceSessionDir = path.join(claudeProjectsDir, pathToClaudeDir(sourcePath))
+        const targetSessionDir = path.join(claudeProjectsDir, pathToClaudeDir(localPath))
 
         try {
           const sessionDirStat = await fs.stat(sourceSessionDir)
           if (sessionDirStat.isDirectory()) {
+            // Copy session directory
             await fs.cp(sourceSessionDir, targetSessionDir, { recursive: true })
+
+            // Update cwd paths in session files (.jsonl files)
+            const sessionFiles = await fs.readdir(targetSessionDir)
+            for (const file of sessionFiles) {
+              if (file.endsWith('.jsonl')) {
+                const filePath = path.join(targetSessionDir, file)
+                const content = await fs.readFile(filePath, 'utf-8')
+                // Replace old cwd path with new path in all JSON lines
+                const updatedContent = content.replace(
+                  new RegExp(sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+                  localPath
+                )
+                await fs.writeFile(filePath, updatedContent)
+              }
+            }
+
             console.log(`[create-from-conversation] Migrated Claude session from ${sourceSessionDir} to ${targetSessionDir}`)
           }
         } catch {
