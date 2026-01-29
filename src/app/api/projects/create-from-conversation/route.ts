@@ -65,11 +65,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Fresh Start 模式必须创建 GitHub 仓库（downstream farmer 需要 remote 来创建 worktree）
-    if (sourcePath && !createGitHub) {
-      return NextResponse.json(
-        { error: 'GitHub repository is required for Fresh Start projects' },
-        { status: 400 }
-      )
+    if (sourcePath) {
+      if (!createGitHub) {
+        return NextResponse.json(
+          { error: 'GitHub repository is required for Fresh Start projects' },
+          { status: 400 }
+        )
+      }
+      if (!(await isGitHubConfigured())) {
+        return NextResponse.json(
+          { error: 'GitHub CLI not configured. Run: gh auth login. Fresh Start projects require GitHub.' },
+          { status: 500 }
+        )
+      }
     }
 
     // Generate safe directory name
@@ -101,16 +109,28 @@ export async function POST(request: NextRequest) {
     let hasExistingCode = false
     if (sourcePath) {
       console.log(`[create-from-conversation] Migrating code from temp directory: ${sourcePath}`)
+
+      // For Fresh Start, always remove any existing .git in target directory
+      // We'll create a fresh git repo with proper remote
+      try {
+        const targetGitPath = path.join(localPath, '.git')
+        await fs.rm(targetGitPath, { recursive: true, force: true })
+        console.log(`[create-from-conversation] Removed existing .git from ${localPath}`)
+      } catch {
+        // .git doesn't exist, that's fine
+      }
+
       try {
         // Check if source directory has files
         const sourceStat = await fs.stat(sourcePath)
         if (sourceStat.isDirectory()) {
           const sourceFiles = await fs.readdir(sourcePath)
-          // Filter out .git directory - we'll create a fresh git repo with proper remote
+          // Filter out .git directory
           const codeFiles = sourceFiles.filter(f => f !== '.git')
           if (codeFiles.length > 0) {
             // Create parent directory
             await fs.mkdir(path.dirname(localPath), { recursive: true })
+
             // Copy files from temp directory to new project location (excluding .git)
             await fs.cp(sourcePath, localPath, {
               recursive: true,
@@ -166,7 +186,7 @@ export async function POST(request: NextRequest) {
     // Create GitHub repository
     let gitUrl: string | undefined
     let githubError: string | undefined
-    if (createGitHub && isGitHubConfigured()) {
+    if (createGitHub && (await isGitHubConfigured())) {
       try {
         const repo = await createGitHubRepo(safeName, description, true)
         gitUrl = repo.sshUrl

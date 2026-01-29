@@ -1,23 +1,27 @@
-import { Octokit } from '@octokit/rest'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
 
 /**
- * Check if GitHub token is configured
+ * Check if GitHub CLI (gh) is configured and authenticated
  */
-export function isGitHubConfigured(): boolean {
-  return !!process.env.GITHUB_TOKEN
+export async function isGitHubConfigured(): Promise<boolean> {
+  try {
+    await execAsync('gh auth status')
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
  * Get the GitHub username of the authenticated user
  */
 export async function getGitHubUsername(): Promise<string | null> {
-  const token = process.env.GITHUB_TOKEN
-  if (!token) return null
-
   try {
-    const octokit = new Octokit({ auth: token })
-    const { data } = await octokit.users.getAuthenticated()
-    return data.login
+    const { stdout } = await execAsync('gh api user --jq .login')
+    return stdout.trim() || null
   } catch (error) {
     console.error('Failed to get GitHub username:', error)
     return null
@@ -32,45 +36,46 @@ export interface GitHubRepoInfo {
 }
 
 /**
- * Create a new GitHub repository for the authenticated user
+ * Create a new GitHub repository using gh CLI
  */
 export async function createGitHubRepo(
   name: string,
   description: string,
   isPrivate = true
 ): Promise<GitHubRepoInfo> {
-  const token = process.env.GITHUB_TOKEN
-  if (!token) {
-    throw new Error('GITHUB_TOKEN is not configured')
-  }
-
-  const octokit = new Octokit({ auth: token })
-
   try {
-    const { data } = await octokit.repos.createForAuthenticatedUser({
-      name,
-      description,
-      private: isPrivate,
-      auto_init: false,  // We'll initialize locally with our own commit
-    })
+    // Create repository using gh CLI
+    const visibility = isPrivate ? '--private' : '--public'
+    const descFlag = description ? `--description "${description.replace(/"/g, '\\"')}"` : ''
+
+    // Create the repository (returns the URL on stdout)
+    await execAsync(`gh repo create "${name}" ${visibility} ${descFlag}`)
+
+    // Get the username to construct URLs
+    const username = await getGitHubUsername()
+    if (!username) {
+      throw new Error('Could not determine GitHub username')
+    }
+
+    const fullName = `${username}/${name}`
 
     return {
-      sshUrl: data.ssh_url,
-      httpsUrl: data.clone_url,
-      htmlUrl: data.html_url,
-      fullName: data.full_name,
+      sshUrl: `git@github.com:${fullName}.git`,
+      httpsUrl: `https://github.com/${fullName}.git`,
+      htmlUrl: `https://github.com/${fullName}`,
+      fullName,
     }
   } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'status' in error) {
-      const octokitError = error as { status: number; message?: string }
-      if (octokitError.status === 422) {
-        throw new Error(`Repository "${name}" already exists or name is invalid`)
-      }
-      if (octokitError.status === 401) {
-        throw new Error('GitHub authentication failed. Please check your GITHUB_TOKEN')
-      }
+    const message = error instanceof Error ? error.message : String(error)
+
+    if (message.includes('already exists')) {
+      throw new Error(`Repository "${name}" already exists`)
     }
-    throw error
+    if (message.includes('not logged') || message.includes('auth')) {
+      throw new Error('GitHub CLI not authenticated. Run: gh auth login')
+    }
+
+    throw new Error(`Failed to create GitHub repository: ${message}`)
   }
 }
 
@@ -78,27 +83,13 @@ export async function createGitHubRepo(
  * Check if a repository name is available
  */
 export async function isRepoNameAvailable(name: string): Promise<boolean> {
-  const token = process.env.GITHUB_TOKEN
-  if (!token) return true  // Can't check without token
-
-  const octokit = new Octokit({ auth: token })
-
   try {
     const username = await getGitHubUsername()
     if (!username) return true
 
-    await octokit.repos.get({
-      owner: username,
-      repo: name,
-    })
+    await execAsync(`gh repo view "${username}/${name}" --json name`)
     return false  // Repo exists
-  } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'status' in error) {
-      const octokitError = error as { status: number }
-      if (octokitError.status === 404) {
-        return true  // Repo doesn't exist, name is available
-      }
-    }
-    return true  // Assume available on other errors
+  } catch {
+    return true  // Repo doesn't exist or error, assume available
   }
 }
