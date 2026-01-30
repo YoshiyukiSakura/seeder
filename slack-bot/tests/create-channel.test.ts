@@ -4,49 +4,75 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { App } from '@slack/bolt'
-import { parseCommandParams, registerCreateChannelCommand } from '../src/commands/create-channel'
+import { fallbackMatch, formatProjectList, registerCreateChannelCommand } from '../src/commands/create-channel'
 
 // Mock environment
 const ORIGINAL_WEB_URL = process.env.WEB_URL
 const ORIGINAL_BOT_SECRET = process.env.BOT_SECRET
 
-describe('parseCommandParams', () => {
-  it('should extract projectId from command text', () => {
-    const result = parseCommandParams('proj-12345-abcde')
-    expect(result.projectId).toBe('proj-12345-abcde')
-    expect(result.error).toBeUndefined()
+const mockProjects = [
+  { id: 'proj-1', name: 'My Awesome Project', hasChannel: false },
+  { id: 'proj-2', name: 'Another Project', hasChannel: true, channelName: 'project-another' },
+  { id: 'proj-3', name: 'Test App', hasChannel: false },
+]
+
+describe('fallbackMatch', () => {
+  it('should return exact match with high confidence', () => {
+    const result = fallbackMatch('My Awesome Project', mockProjects)
+    expect(result.projectId).toBe('proj-1')
+    expect(result.projectName).toBe('My Awesome Project')
+    expect(result.confidence).toBe('high')
   })
 
-  it('should handle UUID format', () => {
-    const result = parseCommandParams('550e8400-e29b-41d4-a716-446655440000')
-    expect(result.projectId).toBe('550e8400-e29b-41d4-a716-446655440000')
+  it('should be case insensitive', () => {
+    const result = fallbackMatch('my awesome project', mockProjects)
+    expect(result.projectId).toBe('proj-1')
+    expect(result.confidence).toBe('high')
   })
 
-  it('should trim whitespace', () => {
-    const result = parseCommandParams('  proj-123  ')
-    expect(result.projectId).toBe('proj-123')
+  it('should return partial match with high confidence when unique', () => {
+    const result = fallbackMatch('Awesome', mockProjects)
+    expect(result.projectId).toBe('proj-1')
+    expect(result.confidence).toBe('high')
+    expect(result.reason).toBe('Partial match')
   })
 
-  it('should return error for empty text', () => {
-    const result = parseCommandParams('')
+  it('should return low confidence when multiple matches', () => {
+    const result = fallbackMatch('Project', mockProjects)
     expect(result.projectId).toBeNull()
-    expect(result.error).toBe('Missing project ID')
+    expect(result.confidence).toBe('low')
+    expect(result.reason).toContain('Multiple matches')
   })
 
-  it('should return error for whitespace only', () => {
-    const result = parseCommandParams('   ')
+  it('should return none confidence when no match', () => {
+    const result = fallbackMatch('nonexistent', mockProjects)
     expect(result.projectId).toBeNull()
-    expect(result.error).toBe('Missing project ID')
+    expect(result.confidence).toBe('none')
   })
 
-  it('should handle project ID with special characters', () => {
-    const result = parseCommandParams('my-project_name.v2')
-    expect(result.projectId).toBe('my-project_name.v2')
+  it('should handle empty project list', () => {
+    const result = fallbackMatch('anything', [])
+    expect(result.projectId).toBeNull()
+    expect(result.confidence).toBe('none')
+  })
+})
+
+describe('formatProjectList', () => {
+  it('should format projects with channel info', () => {
+    const result = formatProjectList(mockProjects)
+    expect(result).toContain('1. *My Awesome Project*')
+    expect(result).toContain('2. *Another Project* → #project-another')
+    expect(result).toContain('3. *Test App*')
+  })
+
+  it('should handle empty list', () => {
+    const result = formatProjectList([])
+    expect(result).toBe('No projects found.')
   })
 })
 
 describe('registerCreateChannelCommand', () => {
-  let mockApp: { command: vi.Mock }
+  let mockApp: { command: vi.Mock; action: vi.Mock }
   let mockRespond: vi.Mock
 
   beforeEach(() => {
@@ -55,6 +81,7 @@ describe('registerCreateChannelCommand', () => {
     mockRespond = vi.fn()
     mockApp = {
       command: vi.fn(),
+      action: vi.fn(),
     }
   })
 
@@ -72,15 +99,23 @@ describe('registerCreateChannelCommand', () => {
     vi.restoreAllMocks()
   })
 
-  it('should register /seeder-create-channel command', () => {
+  it('should register /seeder-create-channel command and action handlers', () => {
     registerCreateChannelCommand(mockApp as unknown as App)
 
     expect(mockApp.command).toHaveBeenCalledWith('/seeder-create-channel', expect.any(Function))
+    expect(mockApp.action).toHaveBeenCalledWith('confirm_create_channel', expect.any(Function))
+    expect(mockApp.action).toHaveBeenCalledWith('cancel_create_channel', expect.any(Function))
   })
 
-  it('should return error message when projectId is missing', async () => {
-    registerCreateChannelCommand(mockApp as unknown as App)
+  it('should list projects when no input provided', async () => {
+    // Mock fetch for listing projects
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ projects: mockProjects }),
+    } as Response)
+    vi.spyOn(global, 'fetch').mockImplementation(mockFetch)
 
+    registerCreateChannelCommand(mockApp as unknown as App)
     const commandHandler = mockApp.command.mock.calls[0][1]
 
     await commandHandler({
@@ -89,47 +124,6 @@ describe('registerCreateChannelCommand', () => {
       respond: mockRespond,
     })
 
-    expect(mockRespond).toHaveBeenCalledWith({
-      response_type: 'ephemeral',
-      text: expect.stringContaining('Missing project ID'),
-    })
-  })
-
-  it('should call API and return success message when channel created', async () => {
-    // Mock fetch for API call
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        channelId: 'C123456',
-        channelName: 'project-test-project',
-      }),
-    } as Response)
-    vi.spyOn(global, 'fetch').mockImplementation(mockFetch)
-
-    registerCreateChannelCommand(mockApp as unknown as App)
-
-    const commandHandler = mockApp.command.mock.calls[0][1]
-
-    const mockAck = vi.fn()
-
-    await commandHandler({
-      command: { text: 'proj-123', user_id: 'U123', user_name: 'testuser' },
-      ack: mockAck,
-      respond: mockRespond,
-    })
-
-    expect(mockAck).toHaveBeenCalled()
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:3000/api/slack/create-channel',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'x-bot-secret': 'test-secret',
-        }),
-        body: JSON.stringify({ projectId: 'proj-123' }),
-      })
-    )
     expect(mockRespond).toHaveBeenCalledWith(
       expect.objectContaining({
         response_type: 'ephemeral',
@@ -137,7 +131,7 @@ describe('registerCreateChannelCommand', () => {
           expect.objectContaining({
             type: 'section',
             text: expect.objectContaining({
-              text: '*Create Slack Channel*',
+              text: expect.stringContaining('Available Projects'),
             }),
           }),
         ]),
@@ -145,84 +139,63 @@ describe('registerCreateChannelCommand', () => {
     )
   })
 
-  it('should return existing channel message when channel already exists', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        channelId: 'C123456',
-        channelName: 'project-test-project',
-        message: 'Channel already exists',
-      }),
-    } as Response)
+  it('should create channel when high confidence match', async () => {
+    // Mock fetch for listing projects and creating channel
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ projects: mockProjects }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false, // AI API fails, fallback to simple match
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          channelId: 'C123456',
+          channelName: 'project-my-awesome-project',
+        }),
+      } as Response)
     vi.spyOn(global, 'fetch').mockImplementation(mockFetch)
 
     registerCreateChannelCommand(mockApp as unknown as App)
-
     const commandHandler = mockApp.command.mock.calls[0][1]
 
     await commandHandler({
-      command: { text: 'proj-123', user_id: 'U123', user_name: 'testuser' },
+      command: { text: 'My Awesome Project', user_id: 'U123', user_name: 'testuser' },
       ack: vi.fn(),
       respond: mockRespond,
     })
 
-    expect(mockRespond).toHaveBeenCalledWith(
-      expect.objectContaining({
-        response_type: 'ephemeral',
-      })
-    )
-    // Check that the response mentions "already exists"
+    // Should show success message
+    expect(mockRespond).toHaveBeenCalled()
     const respondCall = mockRespond.mock.calls[0][0]
-    expect(JSON.stringify(respondCall)).toContain('already exists')
+    expect(JSON.stringify(respondCall)).toContain('Channel Created')
   })
 
-  it('should return error message when API fails', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({
-        success: false,
-        error: 'Project not found',
-      }),
-    } as Response)
+  it('should show no match message when project not found', async () => {
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ projects: mockProjects }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false, // AI API fails
+      } as Response)
     vi.spyOn(global, 'fetch').mockImplementation(mockFetch)
 
     registerCreateChannelCommand(mockApp as unknown as App)
-
     const commandHandler = mockApp.command.mock.calls[0][1]
 
     await commandHandler({
-      command: { text: 'invalid-proj', user_id: 'U123', user_name: 'testuser' },
+      command: { text: 'nonexistent-project', user_id: 'U123', user_name: 'testuser' },
       ack: vi.fn(),
       respond: mockRespond,
     })
 
-    expect(mockRespond).toHaveBeenCalledWith({
-      response_type: 'ephemeral',
-      text: expect.stringContaining('Failed to create channel'),
-    })
-  })
-
-  it('should handle API exception', async () => {
-    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'))
-    vi.spyOn(global, 'fetch').mockImplementation(mockFetch)
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    registerCreateChannelCommand(mockApp as unknown as App)
-
-    const commandHandler = mockApp.command.mock.calls[0][1]
-
-    await commandHandler({
-      command: { text: 'proj-123', user_id: 'U123', user_name: 'testuser' },
-      ack: vi.fn(),
-      respond: mockRespond,
-    })
-
-    expect(consoleSpy).toHaveBeenCalledWith('Create channel command error:', expect.any(Error))
-    expect(mockRespond).toHaveBeenCalledWith({
-      response_type: 'ephemeral',
-      text: expect.stringContaining('Network error'),
-    })
+    expect(mockRespond).toHaveBeenCalled()
+    const respondCall = mockRespond.mock.calls[0][0]
+    expect(JSON.stringify(respondCall)).toContain('Could not find')
   })
 })
