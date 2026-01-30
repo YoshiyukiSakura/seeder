@@ -7,6 +7,7 @@ import 'dotenv/config'
 import { App } from '@slack/bolt'
 import { registerLoginCommand } from './commands/login'
 import { registerCreateChannelCommand } from './commands/create-channel'
+import { registerLinkChannelCommand } from './commands/link-channel'
 import { registerAppMentionListener } from './listeners/app-mention'
 import { registerThreadMessageListener } from './listeners/thread-message'
 import { registerConversationHandlers } from './services/conversation-manager'
@@ -30,6 +31,7 @@ const app = new App({
 // 注册命令
 registerLoginCommand(app)
 registerCreateChannelCommand(app)
+registerLinkChannelCommand(app)
 
 // 注册事件监听器
 registerAppMentionListener(app)
