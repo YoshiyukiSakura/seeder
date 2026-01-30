@@ -266,6 +266,7 @@ export function runClaude(
               type: 'init',
               data: {
                 cwd,
+                resuming: !!sessionId,  // 保持与第一个 init 事件一致
                 tools: msg.tools?.length || 0,
                 sessionId: msg.session_id  // 这是关键！
               }
