@@ -30,6 +30,9 @@ type BlockKitBlock = {
 // Slack 消息更新累积计数器阈值
 const MESSAGE_UPDATE_THRESHOLD = 5
 
+// Slack 显示摘要的字符限制（超过此限制截断并显示 web 链接）
+const SLACK_SUMMARY_LIMIT = 500
+
 /**
  * 发送错误消息到 Slack
  */
@@ -215,11 +218,60 @@ function findSplitPoint(text: string, maxLength: number): number {
 }
 
 /**
- * 更新 Slack 消息（累积文本）
- * 使用 chat.update 更新已有消息，避免发送多条消息
- * 当消息过长时，分段发送多条消息，确保不丢失内容
+ * 将 git pull 输出简化为摘要
+ * 避免在 Slack 中显示完整的文件列表
  */
-async function updateMessage(
+function summarizeGitOutput(message: string): string {
+  // 检查是否已经是最新
+  if (message.includes('Already up to date')) {
+    return '已是最新'
+  }
+
+  // 匹配 "X files changed, Y insertions(+), Z deletions(-)"
+  const statsMatch = message.match(/(\d+)\s+files?\s+changed(?:,\s+(\d+)\s+insertions?\(\+\))?(?:,\s+(\d+)\s+deletions?\(-\))?/)
+  if (statsMatch) {
+    const files = statsMatch[1]
+    const insertions = statsMatch[2] ? `+${Number(statsMatch[2]).toLocaleString()}` : ''
+    const deletions = statsMatch[3] ? `-${Number(statsMatch[3]).toLocaleString()}` : ''
+    const changes = [insertions, deletions].filter(Boolean).join('/')
+    return `更新了 ${files} 个文件${changes ? ` (${changes} 行)` : ''}`
+  }
+
+  // 如果没有匹配到统计信息，只返回第一行（通常是分支信息或简短状态）
+  const firstLine = message.split('\n')[0]?.trim()
+  if (firstLine && firstLine.length < 100) {
+    return firstLine
+  }
+
+  return 'Changes synced'
+}
+
+/**
+ * 截断文本并添加 web 链接
+ * 用于在 Slack 中显示摘要，完整内容可在 web 查看
+ */
+function truncateWithLink(text: string, limit: number, webUrl: string | null): string {
+  if (text.length <= limit) {
+    return text
+  }
+
+  // 找到合适的截断点
+  const truncated = text.slice(0, limit)
+  const lastNewline = truncated.lastIndexOf('\n')
+  const cutPoint = lastNewline > limit * 0.6 ? lastNewline : limit
+
+  const suffix = webUrl
+    ? `\n\n... 查看完整回复: ${webUrl}`
+    : '\n\n...'
+
+  return text.slice(0, cutPoint) + suffix
+}
+
+/**
+ * 流式更新 Slack 消息，带摘要限制
+ * 使用 chat.update 实现流式输出，超过限制时显示截断版本
+ */
+async function updateMessageWithLimit(
   manager: ConversationManager,
   force: boolean = false
 ): Promise<void> {
@@ -232,56 +284,47 @@ async function updateMessage(
   // 每 5 次累积或强制更新时发送/更新消息
   if (manager.updateCount >= MESSAGE_UPDATE_THRESHOLD || force) {
     try {
-      // 如果消息过长，需要分段发送（确保不丢失内容）
-      while (manager.accumulatedText.length > SLACK_MESSAGE_LIMIT) {
-        const splitPoint = findSplitPoint(manager.accumulatedText, SLACK_MESSAGE_LIMIT)
-        const chunk = manager.accumulatedText.slice(0, splitPoint)
-        manager.accumulatedText = manager.accumulatedText.slice(splitPoint)
-
-        // 如果有当前消息且是第一个 chunk，更新它
-        if (manager.currentMessageTs) {
-          await manager.client.chat.update({
-            channel: manager.channelId,
-            ts: manager.currentMessageTs,
-            text: chunk,
-          })
-          manager.currentMessageTs = null  // 后续 chunk 发送新消息
-        } else {
-          // 发送为新消息
-          await manager.client.chat.postMessage({
-            channel: manager.channelId,
-            thread_ts: manager.threadTs,
-            text: chunk,
-          })
-        }
+      // 计算要显示的内容（限制长度）
+      let displayText: string
+      if (manager.accumulatedText.length > SLACK_SUMMARY_LIMIT) {
+        // 超过限制，显示截断版本 + 提示
+        const truncated = manager.accumulatedText.slice(0, SLACK_SUMMARY_LIMIT)
+        const lastNewline = truncated.lastIndexOf('\n')
+        const cutPoint = lastNewline > SLACK_SUMMARY_LIMIT * 0.6 ? lastNewline : SLACK_SUMMARY_LIMIT
+        displayText = manager.accumulatedText.slice(0, cutPoint) + '\n\n_...处理中，完整内容请查看 web_'
+      } else {
+        displayText = manager.accumulatedText
       }
 
-      // 处理剩余内容（小于限制）
-      if (manager.accumulatedText) {
-        if (manager.currentMessageTs) {
-          // 更新已有消息
+      if (manager.currentMessageTs) {
+        // 更新已有消息
+        try {
           await manager.client.chat.update({
             channel: manager.channelId,
             ts: manager.currentMessageTs,
-            text: manager.accumulatedText,
+            text: displayText,
           })
-        } else {
-          // 发送新消息并保存 ts
+        } catch (updateError) {
+          // 更新失败，改为发送新消息
+          console.warn('Failed to update message, posting new:', updateError)
           const result = await manager.client.chat.postMessage({
             channel: manager.channelId,
             thread_ts: manager.threadTs,
-            text: manager.accumulatedText,
+            text: displayText,
           })
           manager.currentMessageTs = result.ts || null
         }
+      } else {
+        // 发送新消息并保存 ts
+        const result = await manager.client.chat.postMessage({
+          channel: manager.channelId,
+          thread_ts: manager.threadTs,
+          text: displayText,
+        })
+        manager.currentMessageTs = result.ts || null
       }
     } catch (error) {
       console.error('Failed to update message:', error)
-      // 回退到发送新消息
-      await manager.say({
-        text: manager.accumulatedText.slice(0, SLACK_MESSAGE_LIMIT),
-        thread_ts: manager.threadTs,
-      })
     }
     manager.updateCount = 0
   }
@@ -303,15 +346,14 @@ export function getConversationCallbacks(
       // 累积文本
       manager.accumulatedText += content
 
-      // 检查是否需要立即发送（仅换行结尾时强制更新）
-      // 注意：不使用空格作为条件，因为 LLM tokenization 导致大多数片段以空格结尾
+      // 流式更新 Slack 消息，但限制显示长度
       const forceUpdate = content.endsWith('\n')
-      await updateMessage(manager, forceUpdate)
+      await updateMessageWithLimit(manager, forceUpdate)
     },
 
     onQuestion: async (data) => {
       // 先发送累积的文本
-      await updateMessage(manager, true)
+      await updateMessageWithLimit(manager, true)
 
       // 为每个问题发送问题卡片（支持多问题）
       for (let i = 0; i < data.questions.length; i++) {
@@ -328,57 +370,63 @@ export function getConversationCallbacks(
     },
 
     onTool: async (data) => {
-      // 发送累积的文本
-      await updateMessage(manager, true)
-
-      // 发送工具使用提示
-      const toolText = `*Using tool:* ${data.name}${data.summary ? ` - ${data.summary}` : ''}`
-      await manager.say({
-        text: toolText,
-        thread_ts: manager.threadTs,
-      })
+      // 不发送工具使用通知，减少 Slack 消息噪音
+      // 工具调用详情可在 web 查看
     },
 
     onResult: async (data) => {
-      // 发送累积的文本
-      await updateMessage(manager, true)
-
       // 更新 planId（如果有）
       if (data.planId) {
         manager.planId = data.planId
       }
 
-      // 发送结果
+      // 累积结果内容并更新显示
       if (data.content) {
-        await manager.say({
-          text: data.content,
-          thread_ts: manager.threadTs,
-        })
+        manager.accumulatedText += data.content
+        await updateMessageWithLimit(manager, true)
       }
     },
 
     onError: async (error) => {
       // 发送累积的文本
-      await updateMessage(manager, true)
+      await updateMessageWithLimit(manager, true)
 
       // 发送错误消息
       await sendErrorMessage(manager.say, manager.threadTs, error)
     },
 
     onDone: async (data) => {
-      // 发送累积的文本
-      await updateMessage(manager, true)
+      // 对话结束时，更新消息为最终版本（带 web 链接）
+      const webUrl = manager.planId ? getWebUrlForPlan(manager.planId) : null
 
-      // 发送完成消息和链接
-      if (manager.planId) {
-        const webUrl = getWebUrlForPlan(manager.planId)
+      if (manager.accumulatedText && manager.currentMessageTs) {
+        // 更新现有消息为最终摘要（带 web 链接）
+        const summary = truncateWithLink(manager.accumulatedText, SLACK_SUMMARY_LIMIT, webUrl)
+        try {
+          await manager.client.chat.update({
+            channel: manager.channelId,
+            ts: manager.currentMessageTs,
+            text: summary,
+          })
+        } catch (error) {
+          console.warn('Failed to update final message:', error)
+          // 发送新消息作为回退
+          await manager.say({
+            text: summary,
+            thread_ts: manager.threadTs,
+          })
+        }
+      } else if (manager.accumulatedText) {
+        // 没有现有消息，发送新消息
+        const summary = truncateWithLink(manager.accumulatedText, SLACK_SUMMARY_LIMIT, webUrl)
         await manager.say({
-          text: `Conversation complete. View on web: ${webUrl}`,
+          text: summary,
           thread_ts: manager.threadTs,
         })
-      } else {
+      } else if (webUrl) {
+        // 没有文本内容，只发送完成消息和链接
         await manager.say({
-          text: 'Conversation complete.',
+          text: `任务完成。查看详情: ${webUrl}`,
           thread_ts: manager.threadTs,
         })
       }
@@ -386,12 +434,16 @@ export function getConversationCallbacks(
 
     onGitSync: async (data) => {
       // 发送累积的文本
-      await updateMessage(manager, true)
+      await updateMessageWithLimit(manager, true)
 
       // 发送 Git 同步状态
-      const statusText = data.success
-        ? `Git sync: ${data.message || 'Changes synced'}`
-        : `Git sync failed: ${data.error || 'Unknown error'}`
+      let statusText: string
+      if (data.success) {
+        const summary = summarizeGitOutput(data.message || '')
+        statusText = `Git sync: ${summary}`
+      } else {
+        statusText = `Git sync failed: ${data.error || 'Unknown error'}`
+      }
 
       await manager.say({
         text: statusText,
