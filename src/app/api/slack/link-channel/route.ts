@@ -22,11 +22,9 @@ async function getSlackChannelInfo(channelId: string): Promise<{
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: JSON.stringify({
-      channel: channelId,
-    }),
+    body: `channel=${channelId}`,
   })
 
   const data = await response.json()
