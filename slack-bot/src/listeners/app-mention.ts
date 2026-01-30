@@ -89,9 +89,6 @@ export function registerAppMentionListener(app: App): void {
       return
     }
 
-    // 发送占位消息并启动
-    await sendPlaceholderAndStart(say, ts, userId)
-
     try {
       // 调用频道映射 API 获取 projectId
       const projectData = await getProjectByChannel(channel)

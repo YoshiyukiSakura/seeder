@@ -295,15 +295,8 @@ export function getConversationCallbacks(
 ): SeedbedCallbacks {
   return {
     onInit: async (data) => {
-      // 发送初始化提示
-      const initText = data.resuming
-        ? 'Resuming conversation...'
-        : 'Starting new conversation...'
-
-      await manager.say({
-        text: initText,
-        thread_ts: manager.threadTs,
-      })
+      // 不再发送初始化消息，直接开始累积文本
+      // 用户已经知道他们发起了对话，无需额外提示
     },
 
     onText: async (content) => {

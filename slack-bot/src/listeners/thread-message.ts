@@ -81,10 +81,7 @@ export function registerThreadMessageListener(app: App): void {
         return
       }
 
-      // 5. 发送占位消息并启动流式回复
-      await sendPlaceholderAndStart(say, message.thread_ts, message.user)
-
-      // 6. 继续对话
+      // 5. 继续对话（不发送占位消息，直接开始）
       await continueConversation({
         answer: message.text,
         projectPath: planData.projectPath,  // 使用正确的 projectPath

@@ -1,5 +1,14 @@
 # Seeder 项目说明
 
+## 部署规则
+
+**严禁使用 rsync 部署代码到远程服务器！** rsync 会覆盖远程的 .env 等配置文件，导致生产环境故障。
+
+正确的部署流程：
+1. 本地 commit 并 push 到 GitHub
+2. 在远程服务器上 git pull
+3. 重启相关服务
+
 ## Dev Server
 
 **重要：Dev server 必须使用 pm2 管理，不要直接用 npm run dev**
