@@ -14,14 +14,14 @@ export function getWebUrl(): string {
  * 生成 Web 端 Plan URL
  */
 export function getWebUrlForPlan(planId: string): string {
-  return `${getWebUrl()}/plans/${planId}`
+  return `${getWebUrl()}/?planId=${planId}`
 }
 
 /**
  * 生成 Web 端 Plan URL (带消息锚点)
  */
 export function getWebUrlForPlanWithMessage(planId: string, messageTs: string): string {
-  return `${getWebUrl()}/plans/${planId}?msg=${messageTs}`
+  return `${getWebUrl()}/?planId=${planId}&msg=${messageTs}`
 }
 
 /**

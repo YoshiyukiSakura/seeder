@@ -44,30 +44,30 @@ describe('URL Generation', () => {
 
   it('should generate correct web URL for plan', () => {
     const url = getWebUrlForPlan('plan-123')
-    expect(url).toBe(`${process.env.WEB_URL}/plans/plan-123`)
+    expect(url).toBe(`${process.env.WEB_URL}/?planId=plan-123`)
   })
 
   it('should generate correct web URL with message anchor', () => {
     const url = getWebUrlForPlanWithMessage('plan-123', '123.456')
-    expect(url).toBe(`${process.env.WEB_URL}/plans/plan-123?msg=123.456`)
+    expect(url).toBe(`${process.env.WEB_URL}/?planId=plan-123&msg=123.456`)
   })
 
   it('should handle custom WEB_URL', () => {
     process.env.WEB_URL = 'https://my-seedbed.example.com'
     const url = getWebUrlForPlan('plan-456')
-    expect(url).toBe('https://my-seedbed.example.com/plans/plan-456')
+    expect(url).toBe('https://my-seedbed.example.com/?planId=plan-456')
   })
 
   it('should handle WEB_URL with trailing slash', () => {
     process.env.WEB_URL = 'http://localhost:3000/'
     const url = getWebUrlForPlan('plan-789')
-    expect(url).toBe('http://localhost:3000/plans/plan-789')
+    expect(url).toBe('http://localhost:3000/?planId=plan-789')
   })
 
   it('should use default localhost:3000 when WEB_URL is not set', () => {
     delete process.env.WEB_URL
     const url = getWebUrlForPlan('plan-default')
-    expect(url).toBe('http://localhost:3000/plans/plan-default')
+    expect(url).toBe('http://localhost:3000/?planId=plan-default')
   })
 })
 
@@ -437,7 +437,7 @@ describe('Plan Created', () => {
     expect(manager.planId).toBe('plan-abc')
     expect(mockSay).toHaveBeenCalledTimes(1)
     const sayCall = mockSay.mock.calls[0][0]
-    expect(sayCall.text).toContain('/plans/plan-abc')
+    expect(sayCall.text).toContain('/?planId=plan-abc')
     expect(sayCall.thread_ts).toBe('123.456')
   })
 })
@@ -461,7 +461,7 @@ describe('Done Event', () => {
     expect(mockSay).toHaveBeenCalledTimes(1)
     const sayCall = mockSay.mock.calls[0][0]
     expect(sayCall.text).toContain('Conversation complete')
-    expect(sayCall.text).toContain('/plans/plan-existing')
+    expect(sayCall.text).toContain('/?planId=plan-existing')
   })
 
   it('should send completion message without link if no planId', async () => {
@@ -482,7 +482,7 @@ describe('Done Event', () => {
     expect(mockSay).toHaveBeenCalledTimes(1)
     const sayCall = mockSay.mock.calls[0][0]
     expect(sayCall.text).toContain('Conversation complete')
-    expect(sayCall.text).not.toContain('/plans/')
+    expect(sayCall.text).not.toContain('planId=')
   })
 })
 
