@@ -452,6 +452,9 @@ export function getConversationCallbacks(
     },
 
     onPlanCreated: async (data) => {
+      // 先发送累积的文本
+      await updateMessageWithLimit(manager, true)
+
       // 保存 planId
       manager.planId = data.planId
 
