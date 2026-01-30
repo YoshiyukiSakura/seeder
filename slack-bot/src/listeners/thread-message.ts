@@ -44,8 +44,20 @@ export function registerThreadMessageListener(app: App): void {
       text: string
     }
 
+    // 调试日志：记录收到的消息事件
+    console.log('[thread-message] Received message event:', {
+      ts: message.ts,
+      thread_ts: message.thread_ts,
+      channel: message.channel,
+      user: message.user,
+      bot_id: message.bot_id,
+      subtype: message.subtype,
+      text: message.text?.slice(0, 50),
+    })
+
     // 1. 排除 Bot 消息
     if (isBotMessage(message)) {
+      console.log('[thread-message] Skipping bot message')
       return
     }
 
