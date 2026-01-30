@@ -72,30 +72,16 @@ async function matchProjectWithAI(userInput: string, projects: Project[]): Promi
 
   const projectList = projects.map((p, i) => `${i + 1}. "${p.name}" (id: ${p.id})`).join('\n')
 
-  const prompt = `You are a project matching assistant. The user wants to find a project.
+  const prompt = `Match user input to a project. Output JSON only, no explanation.
 
-Available projects:
+Projects:
 ${projectList}
 
-User's input: "${userInput}"
+Input: "${userInput}"
 
-Task: Determine which project the user is referring to. Consider:
-- Partial name matches
-- Typos and similar spellings
-- Abbreviations
+Output format: {"matchedIndex": <1-${projects.length} or null>, "confidence": "high"|"low"|"none", "reason": "<10 words max>"}
 
-Respond in JSON format only:
-{
-  "matchedIndex": <number 1-${projects.length} or null if no match>,
-  "confidence": "high" | "low" | "none",
-  "reason": "<brief explanation>"
-}
-
-Rules:
-- "high": Clear match (exact or very close)
-- "low": Possible match but ambiguous
-- "none": No reasonable match found
-- If multiple projects could match equally, use "low" confidence`
+Rules: high=clear match, low=ambiguous, none=no match`
 
   try {
     const response = await fetch(MINIMAX_API_URL, {
@@ -108,7 +94,7 @@ Rules:
         model: 'MiniMaxAI/MiniMax-M2.1',
         messages: [{ role: 'user', content: prompt }],
         stream: false,
-        max_tokens: 256,
+        max_tokens: 512,
       }),
     })
 
