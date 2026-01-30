@@ -160,10 +160,22 @@ export function createMockRequest(options: {
 } = {}): NextRequest {
   const { method = 'GET', url = 'http://localhost:3000', cookies = {}, headers = {}, body } = options
 
+  // Create a ReadableStream for the body so request.json() works correctly
+  let bodyStream: ReadableStream | undefined
+  if (body) {
+    const bodyString = JSON.stringify(body)
+    bodyStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(bodyString))
+        controller.close()
+      },
+    })
+  }
+
   const request = new NextRequest(url, {
     method,
     headers: new Headers(headers),
-    body: body ? JSON.stringify(body) : undefined,
+    body: bodyStream,
   })
 
   // Mock cookies

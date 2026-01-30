@@ -10,7 +10,15 @@ export async function POST(request: NextRequest) {
   // 获取请求的 abort signal
   const signal = request.signal
 
-  let body: { prompt?: string; projectPath?: string; projectId?: string; imagePaths?: string[] }
+  let body: {
+    prompt?: string
+    projectPath?: string
+    projectId?: string
+    imagePaths?: string[]
+    slackThreadTs?: string
+    slackChannelId?: string
+    slackChannelName?: string
+  }
   try {
     body = await request.json()
   } catch {
@@ -24,7 +32,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const { prompt, projectPath, projectId, imagePaths } = body
+  const { prompt, projectPath, projectId, imagePaths, slackThreadTs, slackChannelId, slackChannelName } = body
 
   if (!prompt) {
     const errorEvent = createSSEError(
@@ -114,7 +122,10 @@ export async function POST(request: NextRequest) {
         name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
         description: prompt,
         status: 'DRAFT',
-        creatorId: userId  // 保存创建者
+        creatorId: userId,  // 保存创建者
+        slackThreadTs: slackThreadTs || null,
+        slackChannelId: slackChannelId || null,
+        slackChannelName: slackChannelName || null
       }
     })
     localPlanId = plan.id

@@ -6,6 +6,10 @@
 import 'dotenv/config'
 import { App } from '@slack/bolt'
 import { registerLoginCommand } from './commands/login'
+import { registerCreateChannelCommand } from './commands/create-channel'
+import { registerAppMentionListener } from './listeners/app-mention'
+import { registerThreadMessageListener } from './listeners/thread-message'
+import { registerConversationHandlers } from './services/conversation-manager'
 
 // 验证必需的环境变量
 const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN', 'WEB_URL']
@@ -25,14 +29,14 @@ const app = new App({
 
 // 注册命令
 registerLoginCommand(app)
+registerCreateChannelCommand(app)
 
-// 健康检查端点
-app.event('app_mention', async ({ event, say }) => {
-  await say({
-    text: `Hi <@${event.user}>! I'm the Seedbed Bot. Use \`/seedbed-login\` to get started.`,
-    thread_ts: event.ts,
-  })
-})
+// 注册事件监听器
+registerAppMentionListener(app)
+registerThreadMessageListener(app)
+
+// 注册对话相关的处理器（问题卡片交互）
+registerConversationHandlers(app)
 
 // 启动应用 (Socket Mode)
 ;(async () => {

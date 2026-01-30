@@ -50,7 +50,13 @@ model Project {
   user        User          @relation(fields: [userId], references: [id])
   locks       ProjectLock[]
 
+  // Slack 关联字段
+  slackChannelId    String?
+  slackChannelName  String?
+  slackThreadTs     String?
+
   @@index([userId])
+  @@index([slackChannelId])
 }
 
 model MasterPlan {
@@ -97,9 +103,15 @@ model Plan {
   tasks           Task[]
   executions      Execution[]
 
+  // Slack 关联字段
+  slackChannelId    String?
+  slackChannelName  String?
+  slackThreadTs     String?
+
   @@index([projectId])
   @@index([masterPlanId])
   @@index([creatorId])
+  @@index([slackChannelId])
 }
 
 model Task {

@@ -7,6 +7,7 @@ import {
   createMockProject,
   createMockPlan,
   mockPrisma,
+  createMockRequest,
 } from '../../utils/mocks'
 import {
   SSE_INIT_EVENT,
@@ -30,6 +31,12 @@ jest.mock('@/lib/sse-types', () => ({
     data: { message, errorType, code: options?.code },
   }),
   encodeSSEEvent: (event: { type: string; data: unknown }) => `data: ${JSON.stringify(event)}\n\n`,
+}))
+
+// Mock getCurrentUser
+const mockGetCurrentUser = jest.fn()
+jest.mock('@/lib/auth', () => ({
+  getCurrentUser: (...args: unknown[]) => mockGetCurrentUser(...args),
 }))
 
 import { POST } from '@/app/api/claude/start/route'
@@ -106,18 +113,20 @@ function parseSSEEvents(rawEvents: string[]): Array<{ type: string; data: unknow
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockGetCurrentUser.mockResolvedValue(null)
 })
 
 describe('POST /api/claude/start', () => {
   describe('Request Validation', () => {
     it('should return error for invalid JSON body', async () => {
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
+        url: 'http://localhost:3000/api/claude/start',
         body: 'invalid json',
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -128,13 +137,14 @@ describe('POST /api/claude/start', () => {
     })
 
     it('should return error for missing prompt', async () => {
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({}),
+        url: 'http://localhost:3000/api/claude/start',
+        body: {},
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -150,13 +160,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'Hello' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'Hello' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
 
       expect(response.status).toBe(200)
       expect(response.headers.get('Content-Type')).toBe('text/event-stream')
@@ -170,13 +181,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
 
       expect(response.headers.get('Content-Type')).toBe('text/event-stream')
       expect(response.headers.get('Cache-Control')).toBe('no-cache')
@@ -190,16 +202,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Create a todo app',
           projectPath: '/my/project',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockRunClaude).toHaveBeenCalledWith({
         prompt: 'Create a todo app',
@@ -213,13 +226,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockRunClaude).toHaveBeenCalledWith({
         prompt: 'test',
@@ -235,16 +249,17 @@ describe('POST /api/claude/start', () => {
 
       const imagePaths = ['/tmp/uploads/image1.jpg', '/tmp/uploads/image2.png']
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Analyze these images',
           imagePaths,
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockRunClaude).toHaveBeenCalledWith({
         prompt: 'Analyze these images',
@@ -261,13 +276,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -283,13 +299,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -305,13 +322,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -341,13 +359,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -363,13 +382,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -384,13 +404,14 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -414,16 +435,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Create feature X',
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockPrisma.project.findUnique).toHaveBeenCalledWith({
         where: { id: 'proj_123' },
@@ -435,6 +457,8 @@ describe('POST /api/claude/start', () => {
           name: expect.any(String),
           description: 'Create feature X',
           status: 'DRAFT',
+          slackThreadTs: null,
+          slackChannelId: null,
         },
       })
 
@@ -463,16 +487,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Test prompt',
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       // Wait for stream to complete
       await readSSEStream(response)
 
@@ -504,16 +529,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Test prompt',
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       await readSSEStream(response)
 
       // Should save sessionId from init event early
@@ -527,16 +553,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Test prompt',
           projectId: 'nonexistent_proj',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockPrisma.plan.create).not.toHaveBeenCalled()
     })
@@ -549,16 +576,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Test prompt',
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -582,16 +610,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Test prompt',
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -624,16 +653,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Test prompt',
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       await readSSEStream(response)
 
       // Should save pendingQuestion
@@ -654,13 +684,14 @@ describe('POST /api/claude/start', () => {
         },
       })
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -676,13 +707,14 @@ describe('POST /api/claude/start', () => {
         },
       })
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({ prompt: 'test' }),
+        url: 'http://localhost:3000/api/claude/start',
+        body: { prompt: 'test' },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      const response = await POST(request as any)
+      const response = await POST(request)
       const events = await readSSEStream(response)
       const parsed = parseSSEEvents(events)
 
@@ -697,16 +729,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Describe this image',
           imagePaths: ['/tmp/uploads/test.jpg'],
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockRunClaude).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -726,16 +759,17 @@ describe('POST /api/claude/start', () => {
         '/tmp/uploads/img3.gif',
       ]
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Compare these images',
           imagePaths: images,
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockRunClaude).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -749,16 +783,17 @@ describe('POST /api/claude/start', () => {
         { type: 'done', data: {} },
       ]))
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: 'Just text prompt',
           imagePaths: [],
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockRunClaude).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -783,16 +818,17 @@ describe('POST /api/claude/start', () => {
 
       const longPrompt = 'A'.repeat(100)
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: longPrompt,
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockPrisma.plan.create).toHaveBeenCalledWith({
         data: {
@@ -800,6 +836,8 @@ describe('POST /api/claude/start', () => {
           name: 'A'.repeat(50) + '...',
           description: longPrompt,
           status: 'DRAFT',
+          slackThreadTs: null,
+          slackChannelId: null,
         },
       })
     })
@@ -818,16 +856,17 @@ describe('POST /api/claude/start', () => {
 
       const shortPrompt = 'Short prompt'
 
-      const request = new Request('http://localhost:3000/api/claude/start', {
+      const request = createMockRequest({
         method: 'POST',
-        body: JSON.stringify({
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
           prompt: shortPrompt,
           projectId: 'proj_123',
-        }),
+        },
         headers: { 'Content-Type': 'application/json' },
       })
 
-      await POST(request as any)
+      await POST(request)
 
       expect(mockPrisma.plan.create).toHaveBeenCalledWith({
         data: {
@@ -835,6 +874,84 @@ describe('POST /api/claude/start', () => {
           name: shortPrompt,
           description: shortPrompt,
           status: 'DRAFT',
+          slackThreadTs: null,
+          slackChannelId: null,
+        },
+      })
+    })
+  })
+
+  describe('Slack Fields', () => {
+    it('should save slackThreadTs and slackChannelId when creating Plan', async () => {
+      const project = createMockProject({ id: 'proj_123' })
+      const plan = createMockPlan({ id: 'plan_456', projectId: project.id })
+
+      mockPrisma.project.findUnique.mockResolvedValue(project)
+      mockPrisma.plan.create.mockResolvedValue(plan)
+      mockPrisma.conversation.create.mockResolvedValue({ id: 'conv_1' })
+
+      mockRunClaude.mockReturnValue(createAsyncIterable([
+        { type: 'done', data: {} },
+      ]))
+
+      const request = createMockRequest({
+        method: 'POST',
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
+          prompt: 'Create feature X',
+          projectId: 'proj_123',
+          slackThreadTs: '1234567890.123456',
+          slackChannelId: 'C0123456789',
+        },
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      await POST(request)
+
+      expect(mockPrisma.plan.create).toHaveBeenCalledWith({
+        data: {
+          projectId: 'proj_123',
+          name: expect.any(String),
+          description: 'Create feature X',
+          status: 'DRAFT',
+          slackThreadTs: '1234567890.123456',
+          slackChannelId: 'C0123456789',
+        },
+      })
+    })
+
+    it('should handle missing slack fields gracefully', async () => {
+      const project = createMockProject({ id: 'proj_123' })
+      const plan = createMockPlan({ id: 'plan_456', projectId: project.id })
+
+      mockPrisma.project.findUnique.mockResolvedValue(project)
+      mockPrisma.plan.create.mockResolvedValue(plan)
+      mockPrisma.conversation.create.mockResolvedValue({ id: 'conv_1' })
+
+      mockRunClaude.mockReturnValue(createAsyncIterable([
+        { type: 'done', data: {} },
+      ]))
+
+      const request = createMockRequest({
+        method: 'POST',
+        url: 'http://localhost:3000/api/claude/start',
+        body: {
+          prompt: 'Test prompt',
+          projectId: 'proj_123',
+        },
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      await POST(request)
+
+      expect(mockPrisma.plan.create).toHaveBeenCalledWith({
+        data: {
+          projectId: 'proj_123',
+          name: expect.any(String),
+          description: 'Test prompt',
+          status: 'DRAFT',
+          slackThreadTs: null,
+          slackChannelId: null,
         },
       })
     })
