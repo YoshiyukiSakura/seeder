@@ -72,16 +72,38 @@ async function matchProjectWithAI(userInput: string, projects: Project[]): Promi
 
   const projectList = projects.map((p, i) => `${i + 1}. "${p.name}" (id: ${p.id})`).join('\n')
 
-  const prompt = `Match user input to a project. Output JSON only, no explanation.
+  const prompt = `Match the user input "${userInput}" to the most appropriate project from this list:\n${projectList}`
 
-Projects:
-${projectList}
-
-Input: "${userInput}"
-
-Output format: {"matchedIndex": <1-${projects.length} or null>, "confidence": "high"|"low"|"none", "reason": "<10 words max>"}
-
-Rules: high=clear match, low=ambiguous, none=no match`
+  const tools = [
+    {
+      type: 'function',
+      function: {
+        name: 'match_project',
+        description: 'Match user input to a project from the list',
+        parameters: {
+          type: 'object',
+          properties: {
+            matchedIndex: {
+              type: 'integer',
+              description: `Project number (1-${projects.length}) that best matches the user input, or null if no match`,
+              minimum: 1,
+              maximum: projects.length,
+            },
+            confidence: {
+              type: 'string',
+              enum: ['high', 'low', 'none'],
+              description: 'high=clear match, low=ambiguous, none=no match',
+            },
+            reason: {
+              type: 'string',
+              description: 'Brief reason for the match (max 10 words)',
+            },
+          },
+          required: ['confidence', 'reason'],
+        },
+      },
+    },
+  ]
 
   try {
     const response = await fetch(MINIMAX_API_URL, {
@@ -93,6 +115,8 @@ Rules: high=clear match, low=ambiguous, none=no match`
       body: JSON.stringify({
         model: 'MiniMaxAI/MiniMax-M2.1',
         messages: [{ role: 'user', content: prompt }],
+        tools,
+        tool_choice: { type: 'function', function: { name: 'match_project' } },
         stream: false,
         max_tokens: 512,
       }),
@@ -104,19 +128,14 @@ Rules: high=clear match, low=ambiguous, none=no match`
     }
 
     const data = await response.json()
-    let content = data.choices?.[0]?.message?.content || ''
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0]
 
-    // 移除 MiniMax 的 <think>...</think> 标签
-    content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-
-    // 解析 JSON 响应
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      console.error('Failed to parse AI response:', content)
+    if (!toolCall || toolCall.function?.name !== 'match_project') {
+      console.error('No tool call in AI response:', JSON.stringify(data))
       return fallbackMatch(userInput, projects)
     }
 
-    const result = JSON.parse(jsonMatch[0])
+    const result = JSON.parse(toolCall.function.arguments)
     const matchedIndex = result.matchedIndex
 
     if (matchedIndex && matchedIndex >= 1 && matchedIndex <= projects.length) {
@@ -132,7 +151,7 @@ Rules: high=clear match, low=ambiguous, none=no match`
     return {
       projectId: null,
       projectName: null,
-      confidence: 'none',
+      confidence: result.confidence || 'none',
       reason: result.reason || 'No match found',
     }
   } catch (error) {
