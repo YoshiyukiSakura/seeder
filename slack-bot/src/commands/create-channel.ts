@@ -135,7 +135,15 @@ async function matchProjectWithAI(userInput: string, projects: Project[]): Promi
       return fallbackMatch(userInput, projects)
     }
 
-    const result = JSON.parse(toolCall.function.arguments)
+    // 移除 <think>...</think> 标签后解析 JSON
+    let args = toolCall.function.arguments || ''
+    args = args.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+    const jsonMatch = args.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error('Failed to parse tool arguments:', args)
+      return fallbackMatch(userInput, projects)
+    }
+    const result = JSON.parse(jsonMatch[0])
     const matchedIndex = result.matchedIndex
 
     if (matchedIndex && matchedIndex >= 1 && matchedIndex <= projects.length) {
