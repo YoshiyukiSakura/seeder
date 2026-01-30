@@ -118,7 +118,10 @@ Rules:
     }
 
     const data = await response.json()
-    const content = data.choices?.[0]?.message?.content || ''
+    let content = data.choices?.[0]?.message?.content || ''
+
+    // 移除 MiniMax 的 <think>...</think> 标签
+    content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 
     // 解析 JSON 响应
     const jsonMatch = content.match(/\{[\s\S]*\}/)
