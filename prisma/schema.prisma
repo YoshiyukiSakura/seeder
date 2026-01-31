@@ -60,19 +60,55 @@ model Project {
 }
 
 model MasterPlan {
-  id          String     @id @default(cuid())
+  id          String           @id @default(cuid())
   projectId   String
   name        String
   description String?
-  status      PlanStatus @default(DRAFT)
+  status      PlanStatus       @default(DRAFT)
   publishedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
-  project     Project    @relation(fields: [projectId], references: [id])
+  // v1 mode: 原始内容（Markdown 格式的计划）
+  originalContent String?
+
+  // v2 mode: Goal-based fields
+  objective        String?
+  successCriteria  String[]     @default([])
+  constraints      String[]     @default([])
+  bigPlanStatus    MasterPlanStatus @default(DRAFT)
+
+  // 执行配置
+  autoMergeEnabled Boolean      @default(true)
+  mergeStrategy    String       @default("SQUASH")
+  targetBranch     String       @default("main")
+  mergeEveryN      Int          @default(5)
+  waitForMerge     Boolean      @default(true)
+  llmProvider      String       @default("claude-code")
+  maxIterations    Int          @default(100)
+  pauseOnError     Boolean      @default(false)
+
+  // 执行状态
+  currentPhase     Int          @default(0)
+  lastError        String?
+  completedAt      DateTime?
+  
+  // Agent context (v2)
+  context          Json?
+  workingBranch    String?
+  progressPercent  Int?
+  
+  // Decomposition (v1 mode)
+  decomposition    Json?
+  totalPhases      Int?
+
+  // 关联
+  project     Project      @relation(fields: [projectId], references: [id])
   plans       Plan[]
+  iterations  Iteration[]
 
   @@index([projectId])
+  @@index([bigPlanStatus])
 }
 
 model Plan {
@@ -490,4 +526,81 @@ model ReviewComment {
   review          Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
   @@index([reviewId])
+}
+
+
+// ==================== MasterPlan v2 Enums ====================
+
+enum MasterPlanStatus {
+  DRAFT          // 草稿
+  READY          // 准备就绪（已确认可执行）
+  ANALYZING      // 分析中
+  DECOMPOSING    // 分解中
+  RUNNING        // 执行中
+  PAUSED         // 已暂停
+  COMPLETED      // 已完成
+  FAILED         // 失败
+  CANCELLED      // 已取消
+}
+
+enum IterationStatus {
+  PENDING        // 待执行
+  PLANNING       // 规划中
+  RUNNING        // 执行中
+  EVALUATING     // 评估中
+  MERGING        // 合并中
+  COMPLETED      // 已完成
+  FAILED         // 失败
+  SKIPPED        // 跳过
+}
+
+// ==================== MasterPlan v2 Model: Iteration ====================
+
+model Iteration {
+  id             String           @id @default(cuid())
+  masterPlanId   String
+  phase          Int              // 迭代阶段（1, 2, 3...）
+  phaseTitle     String?          // 阶段标题
+  status         IterationStatus  @default(PENDING)
+  
+  // 目标和结果
+  currentGoal    String?          // 当前迭代目标
+  intention      String?          // 执行意图
+  reasoning      String?          // 决策推理
+  reflection     String?          // 执行反思
+  outcome        String?          // 执行结果
+  contextUpdates Json?            // 上下文更新
+  previousContext Json?           // 前置上下文快照
+  
+  // 关联的 Plan/Execution (v1 模式)
+  planId         String?
+  executionId    String?
+  
+  // PR 信息
+  prUrl          String?
+  prNumber       Int?
+  prMerged       Boolean          @default(false)
+  prMergedAt     DateTime?
+  branchName     String?
+  
+  // Claude 会话
+  claudeSessionId String?
+  
+  // 时间信息
+  startedAt      DateTime?
+  completedAt    DateTime?
+  
+  // 错误信息
+  error          String?
+  
+  // 审计字段
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  
+  // 关联
+  masterPlan     MasterPlan       @relation(fields: [masterPlanId], references: [id], onDelete: Cascade)
+  
+  @@index([masterPlanId])
+  @@index([phase])
+  @@index([status])
 }
