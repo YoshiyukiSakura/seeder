@@ -105,7 +105,7 @@ model MasterPlan {
   // 关联
   project     Project      @relation(fields: [projectId], references: [id])
   plans       Plan[]
-  iterations  Iteration[]
+  iterations  MasterPlanIteration[]
 
   @@index([projectId])
   @@index([bigPlanStatus])
@@ -546,9 +546,12 @@ enum MasterPlanStatus {
 enum IterationStatus {
   PENDING        // 待执行
   PLANNING       // 规划中
-  RUNNING        // 执行中
+  DECOMPOSING    // 分解中
+  EXECUTING      // 执行中
+  RUNNING        // 运行中 (兼容)
   EVALUATING     // 评估中
   MERGING        // 合并中
+  WAITING_PR     // 等待 PR
   COMPLETED      // 已完成
   FAILED         // 失败
   SKIPPED        // 跳过
@@ -556,7 +559,7 @@ enum IterationStatus {
 
 // ==================== MasterPlan v2 Model: Iteration ====================
 
-model Iteration {
+model MasterPlanIteration {
   id             String           @id @default(cuid())
   masterPlanId   String
   phase          Int              // 迭代阶段（1, 2, 3...）
@@ -598,7 +601,7 @@ model Iteration {
   updatedAt      DateTime         @updatedAt
   
   // 关联
-  masterPlan     MasterPlan       @relation(fields: [masterPlanId], references: [id], onDelete: Cascade)
+  masterPlan     MasterPlan     @relation(fields: [masterPlanId], references: [id], onDelete: Cascade)
   
   @@index([masterPlanId])
   @@index([phase])
