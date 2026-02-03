@@ -17,6 +17,7 @@ import {
 import { convertConversationToMessage, type Message } from '@/lib/conversation-utils'
 import { PlanHistoryPanel } from '@/components/PlanHistoryPanel'
 import { ProjectCreatorDialog } from '@/components/ProjectCreatorDialog'
+import { ReviewConfirmDialog, type ReviewResult } from '@/components/review/ReviewConfirmDialog'
 import { apiFetch } from '@/lib/basePath'
 
 interface Question {
@@ -83,10 +84,16 @@ function HomeContent() {
   const [loadedProjects, setLoadedProjects] = useState<Project[]>([])  // 已加载的项目列表
   const [showProjectCreator, setShowProjectCreator] = useState(false)  // 项目创建弹窗状态
   const [tempCwd, setTempCwd] = useState<string | null>(null)  // Start Fresh 模式下 Claude 工作的临时目录
+  // Kimi 评审相关状态
+  const [showReviewDialog, setShowReviewDialog] = useState(false)
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null)
+  const [reviewStreamingContent, setReviewStreamingContent] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentPlanIdRef = useRef<string | null>(null)  // 用于跟踪当前正在处理的会话，避免重复恢复
   const abortControllerRef = useRef<AbortController | null>(null)  // 用于中断请求
+  const currentMessageIdRef = useRef<string | null>(null)  // 用于追踪当前正在流式传输的消息ID
 
   // 判断是否是数据库项目（可以保存对话）
   const isDatabaseProject = selectedProject && selectedProject.source === 'database'
@@ -473,18 +480,25 @@ function HomeContent() {
     const decoder = new TextDecoder()
     let buffer = ''
     let hasQuestion = false
-    let receivedSessionId: string | null = null  // 本地追踪 sessionId
-    let resultReceived = false  // 追踪是否收到 result 事件，用于延迟添加 Plan Complete 标记
+    let receivedSessionId: string | null = null
+    let resultReceived = false
+    let accumulatedContent = ''  // 本地累积消息内容
 
     if (isInitial) {
-      // 清除问题提交状态，避免问题区块与新消息顺序冲突
-      // 必须在添加新 assistant 消息之前清除，否则问题区块会显示在新消息之后
       setIsSubmittingAnswer(false)
       setPendingQuestion(null)
       setSelectedAnswers({})
 
-      addMessage('assistant', '')
-      // 初始化进度状态
+      // 创建新消息并使用 ref 存储 ID
+      const newId = Date.now().toString()
+      currentMessageIdRef.current = newId
+      setMessages(prev => [...prev, {
+        id: newId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date()
+      }])
+      
       setProgressState({
         sessionStartTime: Date.now(),
         tools: [],
@@ -494,10 +508,7 @@ function HomeContent() {
 
     try {
       while (true) {
-        // 检查是否已中断
-        if (signal?.aborted) {
-          break
-        }
+        if (signal?.aborted) break
 
         const { value, done } = await reader.read()
         if (done) break
@@ -515,31 +526,44 @@ function HomeContent() {
 
             switch (event.type) {
               case 'init':
-                // 从 init 事件中获取 sessionId（比 result 更早可用）
                 if (event.data.sessionId) {
                   receivedSessionId = event.data.sessionId
                   setSessionId(event.data.sessionId)
                 }
-                // 保存临时工作目录（Start Fresh 模式下）
                 if (event.data.cwd && isFreshMode) {
                   setTempCwd(event.data.cwd)
                 }
                 break
 
               case 'plan_created':
-                // planId 在对话开始时立即返回，不需要等 complete
                 setPlanId(event.data.planId)
                 currentPlanIdRef.current = event.data.planId
                 break
 
               case 'text':
-                updateLastAssistantMessage(event.data.content)
+                console.log(`[frontend] Text event, content length: ${event.data.content?.length || 0}, messageId: ${currentMessageIdRef.current}`)
+                if (currentMessageIdRef.current && event.data.content) {
+                  accumulatedContent += event.data.content
+                  // 使用函数式更新，基于最新状态
+                  setMessages(prev => {
+                    const idx = prev.findIndex(m => m.id === currentMessageIdRef.current)
+                    if (idx === -1) {
+                      console.log(`[frontend] Message not found, id: ${currentMessageIdRef.current}`)
+                      return prev
+                    }
+                    const updated = [...prev]
+                    updated[idx] = { 
+                      ...updated[idx], 
+                      content: accumulatedContent 
+                    }
+                    return updated
+                  })
+                }
                 break
 
               case 'tool':
                 const toolData = event.data as SSEToolData
                 setCurrentTools(prev => [...prev, toolData.name])
-                // 标记前一个工具为完成，添加新工具
                 setProgressState(prev => {
                   const updatedTools = prev.tools.map(t => {
                     if (t.status === 'running') {
@@ -568,8 +592,6 @@ function HomeContent() {
                 break
 
               case 'question':
-                // 只保留第一个有效的 question 事件，忽略后续的
-                // （Claude 可能从主 agent 和 Task 子 agent 发送多个 AskUserQuestion）
                 if (!hasQuestion && event.data?.questions?.length > 0) {
                   hasQuestion = true
                   setPendingQuestion(event.data)
@@ -579,32 +601,38 @@ function HomeContent() {
                 break
 
               case 'result':
-                // 标记收到 result 事件，延迟到流处理完毕后再添加 Plan Complete 标记
-                // 这样可以避免标记出现在消息中间（因为 result 后可能还有 text 事件）
+                console.log(`[frontend] Result event, content length: ${event.data.content?.length || 0}`)
                 resultReceived = true
                 if (event.data.content) {
-                  // 保存计划内容，用于手动提取任务
                   setResultContent(event.data.content)
+                  accumulatedContent += event.data.content
+                  // 更新消息内容
+                  setMessages(prev => {
+                    const idx = prev.findIndex(m => m.id === currentMessageIdRef.current)
+                    if (idx === -1) return prev
+                    const updated = [...prev]
+                    updated[idx] = { 
+                      ...updated[idx], 
+                      content: accumulatedContent 
+                    }
+                    return updated
+                  })
                 }
-                // 保存 sessionId 用于后续继续对话
                 if (event.data.sessionId) {
                   receivedSessionId = event.data.sessionId
                   setSessionId(event.data.sessionId)
                 }
-                // 保存 planId 用于后续继续对话
                 if (event.data.planId) {
                   setPlanId(event.data.planId)
-                  currentPlanIdRef.current = event.data.planId  // 更新ref，防止URL变化触发重复恢复
-                  // 刷新历史列表（新对话创建成功）
+                  currentPlanIdRef.current = event.data.planId
                   setHistoryRefreshTrigger(prev => prev + 1)
                 }
                 break
 
               case 'error':
-                // 根据错误类型提供不同的提示
                 if (event.data.errorType === 'session_error') {
                   addMessage('system', `Session error: ${event.data.message}. Please start a new conversation.`)
-                  setSessionId(null)  // 清空无效的 sessionId
+                  setSessionId(null)
                 } else {
                   addMessage('system', `Error: ${event.data.message}`)
                 }
@@ -616,7 +644,6 @@ function HomeContent() {
         }
       }
     } finally {
-      // 确保 reader 被正确取消
       try {
         await reader.cancel()
       } catch {
@@ -624,24 +651,31 @@ function HomeContent() {
       }
     }
 
-    // 在流处理完毕后，如果收到了 result 且没有新问题，添加 Plan Complete 标记
-    // 这样可以确保标记出现在响应的最后，而不是中间
+    // 在流处理完毕后，添加 Plan Complete 标记
     if (resultReceived && !hasQuestion) {
-      updateLastAssistantMessage('\n\n---\n**Plan Complete**')
+      const planCompleteMarker = '\n\n---\n**Plan Complete**'
+      accumulatedContent += planCompleteMarker
+      setMessages(prev => {
+        const idx = prev.findIndex(m => m.id === currentMessageIdRef.current)
+        if (idx === -1) return prev
+        const updated = [...prev]
+        updated[idx] = { 
+          ...updated[idx], 
+          content: accumulatedContent 
+        }
+        return updated
+      })
     }
 
     if (!hasQuestion) {
       setState('completed')
-      // 没有新问题时，清空旧的问题状态
       setPendingQuestion(null)
       setSelectedAnswers({})
     } else if (!receivedSessionId) {
-      // 有问题但没有收到 sessionId，警告用户
       console.warn('Question received but no sessionId in result')
       addMessage('system', 'Warning: Session ID was not received. You may need to start a new conversation if submitting answers fails.')
     }
     setCurrentTools([])
-    // 标记最后一个工具为完成
     setProgressState(prev => ({
       ...prev,
       tools: prev.tools.map(t => {
@@ -657,6 +691,9 @@ function HomeContent() {
       }),
       currentToolId: null
     }))
+    
+    // 清除当前消息 ID
+    currentMessageIdRef.current = null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -724,6 +761,9 @@ function HomeContent() {
       addMessage('user', userMessage || '', imagePaths.length > 0 ? imagePaths : undefined)
 
       // 如果有 sessionId，继续现有对话；否则创建新对话
+      // 确定 projectPath：fresh 模式使用 tempCwd，否则使用 selectedProject.path
+      const projectPath = isFreshMode ? tempCwd : selectedProject?.path
+
       if (sessionId) {
         const response = await apiFetch('/api/claude/continue', {
           method: 'POST',
@@ -732,7 +772,7 @@ function HomeContent() {
             answer: userMessage || '[Images attached]',
             sessionId,
             planId,
-            projectPath: selectedProject?.path,
+            projectPath,
             imagePaths: imagePaths.length > 0 ? imagePaths : undefined
           }),
           signal
@@ -748,7 +788,8 @@ function HomeContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             prompt: userMessage || '[Images attached]',
-            projectPath: selectedProject?.path,
+            // fresh 模式不传 projectPath，让后端创建临时目录
+            projectPath: isFreshMode ? undefined : selectedProject?.path,
             // 只有数据库项目才传递 projectId，用于创建 Plan 和保存对话
             projectId: isDatabaseProject ? selectedProject.id : undefined,
             imagePaths: imagePaths.length > 0 ? imagePaths : undefined
@@ -834,6 +875,9 @@ function HomeContent() {
     // 保留它们以便在提交过程中显示已选状态
 
     try {
+      // 确定 projectPath：fresh 模式使用 tempCwd，否则使用 selectedProject.path
+      const projectPath = isFreshMode ? tempCwd : selectedProject?.path
+
       const response = await apiFetch('/api/claude/continue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -841,7 +885,7 @@ function HomeContent() {
           answer: combinedAnswer,
           sessionId,
           planId,  // 传递 planId 用于保存对话
-          projectPath: selectedProject?.path
+          projectPath
         })
       })
 
@@ -991,6 +1035,127 @@ function HomeContent() {
       }
     } catch (error) {
       console.error('Re-publish error:', error)
+    }
+  }
+
+  // 请求 Kimi 评审
+  const handleRequestKimiReview = async () => {
+    if (!planId || reviewLoading) return
+
+    setShowReviewDialog(true)
+    setReviewLoading(true)
+    setReviewResult(null)
+    setReviewStreamingContent('')
+
+    try {
+      const response = await apiFetch(`/api/plans/${planId}/kimi-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        setReviewResult({
+          reviewId: '',
+          parseError: error.error || 'Failed to start review'
+        })
+        setReviewLoading(false)
+        return
+      }
+
+      // 处理 SSE 流
+      const reader = response.body?.getReader()
+      if (!reader) {
+        setReviewResult({
+          reviewId: '',
+          parseError: 'No response body'
+        })
+        setReviewLoading(false)
+        return
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const jsonStr = line.slice(6)
+
+          try {
+            const event = JSON.parse(jsonStr)
+
+            switch (event.type) {
+              case 'text':
+                setReviewStreamingContent(prev => prev + event.data.content)
+                break
+
+              case 'result':
+                setReviewResult(event.data as ReviewResult)
+                setReviewLoading(false)
+                break
+
+              case 'error':
+                setReviewResult({
+                  reviewId: '',
+                  parseError: event.data.message
+                })
+                setReviewLoading(false)
+                break
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    } catch (error) {
+      setReviewResult({
+        reviewId: '',
+        parseError: error instanceof Error ? error.message : 'Unknown error'
+      })
+      setReviewLoading(false)
+    }
+  }
+
+  // 发送 Kimi 评审反馈给 Claude
+  const handleSendKimiFeedback = async (feedback: string) => {
+    if (!planId || !sessionId) return
+
+    setShowReviewDialog(false)
+    setState('processing')
+
+    // 创建新的 AbortController
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+
+    try {
+      const response = await apiFetch(`/api/plans/${planId}/kimi-review/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          feedback,
+          reviewId: reviewResult?.reviewId
+        }),
+        signal
+      })
+
+      // 使用现有的 processSSE 函数处理响应
+      await processSSE(response, true, signal)
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
+      addMessage('system', `Failed to send feedback: ${error}`)
+      setState('idle')
+    } finally {
+      abortControllerRef.current = null
     }
   }
 
@@ -1221,6 +1386,18 @@ function HomeContent() {
                       <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
                     )}
                   </div>
+                  {/* Kimi Review Button - shown after Plan Complete */}
+                  {msg.role === 'assistant' && msg.content.includes('**Plan Complete**') && planId && sessionId && state !== 'processing' && (
+                    <button
+                      onClick={handleRequestKimiReview}
+                      disabled={reviewLoading}
+                      className="mt-2 px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center gap-2 transition-colors"
+                      title="Request Kimi to review this plan"
+                    >
+                      <span className="font-bold">K</span>
+                      {reviewLoading ? 'Reviewing...' : 'Request Kimi Review'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1560,6 +1737,19 @@ function HomeContent() {
         planId={planId}
         conversationContent={messages.map(m => `${m.role}: ${m.content}`).join('\n\n')}
         sourcePath={isFreshMode ? tempCwd : null}
+      />
+
+      {/* Kimi Review Dialog */}
+      <ReviewConfirmDialog
+        isOpen={showReviewDialog}
+        onClose={() => {
+          setShowReviewDialog(false)
+          setReviewLoading(false)
+        }}
+        onSendFeedback={handleSendKimiFeedback}
+        reviewResult={reviewResult}
+        isLoading={reviewLoading}
+        streamingContent={reviewStreamingContent}
       />
     </div>
   )

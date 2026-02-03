@@ -321,13 +321,13 @@ export function runClaude(
 
           // 处理所有 result 类型
           if (msg.type === 'result') {
-            // 先处理错误类型
-            if (msg.subtype === 'error') {
+            // 先处理错误类型（包括 error 和 error_during_execution）
+            if (msg.subtype === 'error' || msg.subtype === 'error_during_execution') {
               hasError = true
               return createSSEError(
-                msg.result || 'Unknown error occurred',
-                'claude_error',
-                { recoverable: false }
+                msg.result || 'Session error: conversation may have expired or failed to resume',
+                msg.subtype === 'error_during_execution' ? 'session_error' : 'claude_error',
+                { recoverable: msg.subtype === 'error_during_execution' }
               )
             }
 
@@ -364,8 +364,14 @@ export function runClaude(
         buffer = lines.pop() || ''
 
         for (const line of lines) {
+          if (line.trim()) {
+            console.log(`[claude.ts] Raw line:`, line.slice(0, 300))
+          }
           const event = processLine(line)
-          if (event) yield event
+          if (event) {
+            console.log(`[claude.ts] Processed event type: ${event.type}`)
+            yield event
+          }
         }
       }
 
