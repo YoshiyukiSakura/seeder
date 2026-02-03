@@ -1047,6 +1047,11 @@ function HomeContent() {
     setReviewResult(null)
     setReviewStreamingContent('')
 
+    const REVIEW_TIMEOUT = 5 * 60 * 1000 // 5 分钟超时
+    let timeoutId: NodeJS.Timeout | null = null
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+    let receivedResult = false
+
     try {
       const response = await apiFetch(`/api/plans/${planId}/kimi-review`, {
         method: 'POST',
@@ -1059,20 +1064,24 @@ function HomeContent() {
           reviewId: '',
           parseError: error.error || 'Failed to start review'
         })
-        setReviewLoading(false)
         return
       }
 
       // 处理 SSE 流
-      const reader = response.body?.getReader()
+      reader = response.body?.getReader() ?? null
       if (!reader) {
         setReviewResult({
           reviewId: '',
           parseError: 'No response body'
         })
-        setReviewLoading(false)
         return
       }
+
+      // 设置超时
+      timeoutId = setTimeout(() => {
+        console.warn('[KimiReview] Timeout reached, cancelling reader')
+        reader?.cancel()
+      }, REVIEW_TIMEOUT)
 
       const decoder = new TextDecoder()
       let buffer = ''
@@ -1099,7 +1108,7 @@ function HomeContent() {
 
               case 'result':
                 setReviewResult(event.data as ReviewResult)
-                setReviewLoading(false)
+                receivedResult = true
                 break
 
               case 'error':
@@ -1107,19 +1116,37 @@ function HomeContent() {
                   reviewId: '',
                   parseError: event.data.message
                 })
-                setReviewLoading(false)
+                receivedResult = true
+                break
+
+              case 'done':
+                // 收到 done 事件，正常结束
+                console.log('[KimiReview] Received done event')
                 break
             }
-          } catch {
-            // Ignore parse errors
+          } catch (e) {
+            console.error('[KimiReview] Failed to parse event:', jsonStr, e)
           }
         }
       }
+
+      // 流结束但没有收到 result，说明可能超时或异常
+      if (!receivedResult) {
+        console.warn('[KimiReview] Stream ended without result')
+        setReviewResult({
+          reviewId: '',
+          parseError: 'Review timed out or connection lost'
+        })
+      }
     } catch (error) {
+      console.error('[KimiReview] Error:', error)
       setReviewResult({
         reviewId: '',
         parseError: error instanceof Error ? error.message : 'Unknown error'
       })
+    } finally {
+      // 确保清理
+      if (timeoutId) clearTimeout(timeoutId)
       setReviewLoading(false)
     }
   }
