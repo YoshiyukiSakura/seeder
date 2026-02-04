@@ -119,6 +119,7 @@ model Plan {
   summary         String?        // LLM生成的计划摘要（发布时自动生成）
   status          PlanStatus     @default(DRAFT)
   sessionId       String?
+  cwd             String?        // 工作目录（用于恢复会话，特别是 Fresh Mode 的临时目录）
   pendingQuestion Json?          // 存储待回答的问题数据 {toolUseId, questions}
   publishedAt     DateTime?
   createdAt       DateTime       @default(now())
@@ -138,6 +139,7 @@ model Plan {
   masterPlan      MasterPlan?    @relation(fields: [masterPlanId], references: [id], onDelete: SetNull)
   tasks           Task[]
   executions      Execution[]
+  reviews         PlanReview[]
 
   // Slack 关联字段
   slackChannelId    String?
@@ -190,6 +192,24 @@ model Conversation {
 
   @@index([planId])
   @@index([userId])
+}
+
+model PlanReview {
+  id            String    @id @default(cuid())
+  planId        String
+  reviewerType  String    // 'kimi-cli'
+  kimiSessionId String
+  reviewRound   Int       @default(1)
+  status        String    // 'pending' | 'running' | 'completed' | 'error'
+  score         Int?
+  content       String?   // JSON 字符串，存储评审结果
+  error         String?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  plan          Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([status])
 }
 
 enum PlanStatus {
