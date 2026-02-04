@@ -37,13 +37,15 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // 优先从数据库获取 sessionId（避免前端缓存污染）
+  // 优先从数据库获取 sessionId 和 cwd（避免前端缓存污染）
   let sessionId = clientSessionId
+  let cwd = projectPath || process.cwd()  // 默认值
+
   if (planId) {
     try {
       const plan = await prisma.plan.findUnique({
         where: { id: planId },
-        select: { sessionId: true }
+        select: { sessionId: true, cwd: true }
       })
       if (plan?.sessionId) {
         sessionId = plan.sessionId
@@ -51,8 +53,12 @@ export async function POST(request: NextRequest) {
           console.log(`[continue] Using sessionId from DB: ${sessionId} (client sent: ${clientSessionId})`)
         }
       }
+      if (plan?.cwd) {
+        cwd = plan.cwd  // 使用数据库保存的 cwd
+        console.log(`[continue] Using cwd from DB: ${cwd}`)
+      }
     } catch (err) {
-      console.error('Failed to get sessionId from plan:', err)
+      console.error('Failed to get sessionId/cwd from plan:', err)
     }
   }
 
@@ -67,8 +73,6 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'text/event-stream' },
     })
   }
-
-  const cwd = projectPath || process.cwd()
 
   // 获取当前用户
   const user = await getCurrentUser(request)
@@ -109,8 +113,12 @@ export async function POST(request: NextRequest) {
             controller.close()
             return
           }
+          // 调试日志：记录所有事件类型
+          console.log(`[continue] Event type: ${event.type}, data:`, JSON.stringify(event.data).slice(0, 200))
+          
           // 收集助手消息内容
           if (event.type === 'text' && event.data?.content) {
+            console.log(`[continue] Text content length: ${event.data.content.length}`)
             assistantContent += event.data.content
           }
 
@@ -142,6 +150,10 @@ export async function POST(request: NextRequest) {
 
           // 在 result 事件中添加 planId
           if (event.type === 'result') {
+            // 收集 result 事件中的内容（Claude 可能在这里返回计划内容）
+            if (event.data?.content) {
+              assistantContent += event.data.content
+            }
             if (planId) {
               event.data.planId = planId
               // 计划完成时清除 pendingQuestion，避免刷新页面后重复显示问题

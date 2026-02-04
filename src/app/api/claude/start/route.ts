@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
         name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
         description: prompt,
         status: 'DRAFT',
+        cwd,  // 保存工作目录（用于恢复会话）
         creatorId: userId,  // 保存创建者
         slackThreadTs: slackThreadTs || null,
         slackChannelId: slackChannelId || null,
@@ -229,6 +230,10 @@ export async function POST(request: NextRequest) {
           if (event.type === 'result') {
             if (event.data?.sessionId && !claudeSessionId) {
               claudeSessionId = event.data.sessionId
+            }
+            // 收集 result 事件中的内容（Claude 可能在这里返回计划内容）
+            if (event.data?.content) {
+              assistantContent += event.data.content
             }
             // 在 result 事件中添加 planId
             if (planId) {
