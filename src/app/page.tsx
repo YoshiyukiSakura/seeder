@@ -1158,6 +1158,19 @@ function HomeContent() {
     setShowReviewDialog(false)
     setState('processing')
 
+    // 显示 Kimi 发送的反馈消息（带 Kimi 用户信息）
+    setMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      role: 'user',
+      content: feedback,
+      timestamp: new Date(),
+      user: {
+        id: 'kimi-reviewer',
+        slackUsername: 'Kimi',
+        avatarUrl: 'https://statics.moonshot.cn/kimi-chat/favicon.ico'
+      }
+    }])
+
     // 创建新的 AbortController
     abortControllerRef.current = new AbortController()
     const signal = abortControllerRef.current.signal
