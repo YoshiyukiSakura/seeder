@@ -27,8 +27,8 @@ interface AIMatchResult {
   reason: string
 }
 
-const MINIMAX_API_URL = 'http://208.64.254.167:8000/v1/chat/completions'
-const MINIMAX_API_KEY = 'sk-1234567890abcdef'
+const MINIMAX_API_URL = process.env.MINIMAX_API_URL || 'http://localhost:8000/v1/chat/completions'
+const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''
 
 /**
  * 获取所有项目列表
